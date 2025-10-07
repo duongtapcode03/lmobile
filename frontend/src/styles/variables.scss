@@ -1,0 +1,86 @@
+// LMobile Color Variables - Green Theme
+:root {
+  // Primary Colors - Green Theme
+  --primary-color: #22c55e;        // Main green
+  --primary-hover: #16a34a;        // Darker green on hover
+  --primary-light: #4ade80;        // Light green
+  --primary-dark: #15803d;         // Dark green
+  
+  // Secondary Colors
+  --secondary-color: #10b981;      // Emerald green
+  --secondary-hover: #059669;      // Darker emerald
+  
+  // Accent Colors
+  --accent-color: #34d399;         // Light accent green
+  --accent-hover: #10b981;         // Accent hover
+  
+  // Background Colors
+  --bg-primary: #ffffff;           // White background
+  --bg-secondary: #f0fdf4;         // Light green background
+  --bg-tertiary: #ecfdf5;         // Very light green background
+  
+  // Text Colors
+  --text-primary: #1f2937;        // Dark gray text
+  --text-secondary: #6b7280;      // Medium gray text
+  --text-light: #9ca3af;          // Light gray text
+  --text-white: #ffffff;          // White text
+  
+  // Border Colors
+  --border-light: #e5e7eb;        // Light border
+  --border-medium: #d1d5db;       // Medium border
+  --border-dark: #9ca3af;         // Dark border
+  
+  // Status Colors
+  --success-color: #22c55e;       // Success green
+  --warning-color: #f59e0b;       // Warning orange
+  --error-color: #ef4444;         // Error red
+  --info-color: #3b82f6;          // Info blue
+  
+  // Shadow Colors
+  --shadow-light: rgba(34, 197, 94, 0.1);
+  --shadow-medium: rgba(34, 197, 94, 0.2);
+  --shadow-dark: rgba(34, 197, 94, 0.3);
+  
+  // Gradient Colors
+  --gradient-primary: linear-gradient(135deg, #22c55e, #10b981);
+  --gradient-secondary: linear-gradient(90deg, #22c55e, #16a34a);
+  --gradient-light: linear-gradient(135deg, #4ade80, #22c55e);
+}
+
+// SCSS Variables for easier usage
+$primary-color: var(--primary-color);
+$primary-hover: var(--primary-hover);
+$primary-light: var(--primary-light);
+$primary-dark: var(--primary-dark);
+
+$secondary-color: var(--secondary-color);
+$secondary-hover: var(--secondary-hover);
+
+$accent-color: var(--accent-color);
+$accent-hover: var(--accent-hover);
+
+$bg-primary: var(--bg-primary);
+$bg-secondary: var(--bg-secondary);
+$bg-tertiary: var(--bg-tertiary);
+
+$text-primary: var(--text-primary);
+$text-secondary: var(--text-secondary);
+$text-light: var(--text-light);
+$text-white: var(--text-white);
+
+$border-light: var(--border-light);
+$border-medium: var(--border-medium);
+$border-dark: var(--border-dark);
+
+$success-color: var(--success-color);
+$warning-color: var(--warning-color);
+$error-color: var(--error-color);
+$info-color: var(--info-color);
+
+$shadow-light: var(--shadow-light);
+$shadow-medium: var(--shadow-medium);
+$shadow-dark: var(--shadow-dark);
+
+$gradient-primary: var(--gradient-primary);
+$gradient-secondary: var(--gradient-secondary);
+$gradient-light: var(--gradient-light);

@@ -1,0 +1,233 @@
+@use '../../styles/variables.scss' as *;
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.1);
+
+  .header-banner {
+    background: $gradient-secondary;
+    color: white;
+    padding: 8px 0;
+    font-size: 14px;
+
+    .banner-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      text-align: center;
+
+      span {
+        margin: 0 10px;
+      }
+
+      strong {
+        font-weight: 600;
+      }
+    }
+  }
+
+  .header-main {
+    padding: 15px 0;
+    border-bottom: 1px solid #f0f0f0;
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+
+      .logo {
+        flex-shrink: 0;
+
+        h1 {
+          margin: 0;
+          font-size: 28px;
+          font-weight: bold;
+          color: $primary-color;
+          text-decoration: none;
+        }
+      }
+
+      .search-container {
+        flex: 1;
+        display: flex;
+        gap: 8px;
+        max-width: 600px;
+
+        .search-input {
+          flex: 1;
+          border-radius: 6px;
+        }
+
+        .search-btn {
+          background: $primary-color;
+          border-color: $primary-color;
+          border-radius: 6px;
+
+          &:hover {
+            background: $primary-hover;
+            border-color: $primary-hover;
+          }
+        }
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+
+        .location {
+          color: #666;
+          font-size: 14px;
+          cursor: pointer;
+
+          &:hover {
+            color: $primary-color;
+          }
+        }
+
+        .cart {
+          .ant-btn {
+            color: #333;
+            font-weight: 500;
+
+            &:hover {
+              color: $primary-color;
+            }
+          }
+        }
+
+        .user-menu {
+          .ant-btn {
+            color: #333;
+            font-weight: 500;
+
+            &:hover {
+              color: $primary-color;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  .header-nav {
+    background: #fff;
+    border-bottom: 1px solid #f0f0f0;
+
+    .nav-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      .nav-menu {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+
+        .ant-btn {
+          color: #333;
+          font-weight: 500;
+          font-size: 16px;
+
+          &:hover {
+            color: $primary-color;
+          }
+        }
+
+        .nav-links {
+          display: flex;
+          gap: 25px;
+
+          a {
+            color: #333;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 15px;
+            padding: 15px 0;
+            transition: color 0.3s;
+
+            &:hover {
+              color: $primary-color;
+            }
+          }
+        }
+      }
+
+      .nav-promotions {
+        display: flex;
+        gap: 20px;
+
+        a {
+          color: $primary-color;
+          text-decoration: none;
+          font-weight: 500;
+          font-size: 14px;
+          padding: 15px 0;
+          transition: color 0.3s;
+
+          &:hover {
+            color: $primary-hover;
+          }
+        }
+      }
+    }
+  }
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .header {
+    .header-banner {
+      .banner-content {
+        flex-direction: column;
+        gap: 5px;
+        font-size: 12px;
+      }
+    }
+
+    .header-main {
+      .header-content {
+        flex-direction: column;
+        gap: 15px;
+
+        .search-container {
+          width: 100%;
+          max-width: none;
+        }
+
+        .header-actions {
+          width: 100%;
+          justify-content: space-between;
+        }
+      }
+    }
+
+    .header-nav {
+      .nav-content {
+        flex-direction: column;
+        gap: 10px;
+
+        .nav-menu {
+          .nav-links {
+            flex-wrap: wrap;
+            gap: 15px;
+          }
+        }
+
+        .nav-promotions {
+          flex-wrap: wrap;
+          gap: 15px;
+        }
+      }
+    }
+  }
+}
