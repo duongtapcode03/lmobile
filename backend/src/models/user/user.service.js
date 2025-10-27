@@ -1,13 +1,42 @@
 import { User } from "./user.model.js";
 import { generateTokens, generateAccessToken } from "../../core/utils/generateToken.js";
+import { otpService } from "./user.otp.service.js";
+import { sendResetPasswordEmail } from "../../config/resetPasswordEmail.js";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 export const userService = {
   async register(data) {
-    const existing = await User.findOne({ email: data.email });
-    if (existing) throw new Error("Email đã tồn tại");
+    // Check if email is verified
+    const emailVerified = await otpService.checkEmailVerified(data.email);
+    if (!emailVerified) {
+      throw new Error("Email chưa được xác thực");
+    }
 
-    const user = new User(data);
+    const existing = await User.findOne({ email: data.email });
+    if (existing && existing.password !== 'temp') {
+      throw new Error("Email đã tồn tại");
+    }
+
+    // If temporary user exists, update it with real data
+    if (existing) {
+      existing.name = data.name;
+      existing.password = data.password;
+      existing.phone = data.phone;
+      existing.emailVerified = true;
+      await existing.save();
+      
+      const { accessToken, refreshToken } = generateTokens(existing._id, existing.role);
+      await existing.addRefreshToken(refreshToken);
+      
+      return { user: existing, accessToken, refreshToken };
+    }
+
+    // Create new user
+    const user = new User({
+      ...data,
+      emailVerified: true,
+    });
     await user.save();
 
     const { accessToken, refreshToken } = generateTokens(user._id, user.role);
@@ -140,5 +169,68 @@ export const userService = {
     }
     
     return User.find({}).select("-password -refreshTokens");
+  },
+
+  // Forgot password
+  async forgotPassword(email) {
+    const user = await User.findOne({ email });
+    if (!user) {
+      throw new Error("Email không tồn tại");
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetPasswordExpires = new Date();
+    resetPasswordExpires.setHours(resetPasswordExpires.getHours() + 1); // 1 hour
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = resetPasswordExpires;
+    await user.save();
+
+    // Send reset email
+    try {
+      await sendResetPasswordEmail(email, resetToken);
+    } catch (error) {
+      // Remove token if email failed
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+      throw new Error("Không thể gửi email đặt lại mật khẩu");
+    }
+
+    return { message: "Email đặt lại mật khẩu đã được gửi" };
+  },
+
+  // Reset password
+  async resetPassword(token, newPassword) {
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+      throw new Error("Token không hợp lệ hoặc đã hết hạn");
+    }
+
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    return { message: "Đặt lại mật khẩu thành công" };
+  },
+
+  // Verify reset token
+  async verifyResetToken(token) {
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+      throw new Error("Token không hợp lệ hoặc đã hết hạn");
+    }
+
+    return { valid: true, message: "Token hợp lệ" };
   }
 };

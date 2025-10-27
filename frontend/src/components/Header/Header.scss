@@ -40,13 +40,20 @@
 
       .logo {
         flex-shrink: 0;
-
+        text-decoration: none;
+        
         h1 {
           margin: 0;
           font-size: 28px;
           font-weight: bold;
           color: $primary-color;
           text-decoration: none;
+          transition: all 0.3s;
+          
+          &:hover {
+            color: $primary-hover;
+            transform: scale(1.05);
+          }
         }
       }
 
@@ -100,6 +107,31 @@
         }
 
         .user-menu {
+          .user-menu-button {
+            padding: 0;
+            height: auto;
+            
+            .user-info {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              
+              .user-name {
+                color: #333;
+                font-weight: 500;
+                font-size: 15px;
+              }
+            }
+
+            &:hover {
+              background: transparent;
+              
+              .user-info .user-name {
+                color: $primary-color;
+              }
+            }
+          }
+
           .ant-btn {
             color: #333;
             font-weight: 500;

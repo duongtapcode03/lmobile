@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Card, Row, Col, Typography } from 'antd';
+import { Button, Card, Row, Col, Typography, Space } from 'antd';
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { PageWrapper } from '../../components';
 import { useLayout } from '../../hooks';
 
 const { Title, Paragraph } = Typography;
 
 const HomePage: React.FC = () => {
+  const { t } = useTranslation();
   const { layoutState, setLoading, setError, setEmpty, resetLayout, handleAsync } = useLayout();
   const [data, setData] = useState<any[]>([]);
 
@@ -17,7 +20,7 @@ const HomePage: React.FC = () => {
       
       // Simulate random error
       if (Math.random() < 0.3) {
-        throw new Error('Không thể tải dữ liệu');
+        throw new Error(t('errors.loadDataFailed'));
       }
       
       return [
@@ -47,24 +50,40 @@ const HomePage: React.FC = () => {
   return (
     <div className="container">
       <div className="page-header">
-        <Title level={1}>Chào mừng đến với LMobile</Title>
+        <Title level={1}>{t('homePage.welcomeTitle')}</Title>
         <Paragraph>
-          Website bán điện thoại di động hàng đầu Việt Nam
+          {t('homePage.welcomeSubtitle')}
         </Paragraph>
+      </div>
+
+      {/* Auth buttons */}
+      <div className="auth-buttons" style={{ marginBottom: 32, textAlign: 'center' }}>
+        <Space size="large">
+          <Link to="/register">
+            <Button type="primary" size="large">
+              {t('common.register')}
+            </Button>
+          </Link>
+          <Link to="/login">
+            <Button size="large">
+              {t('common.login')}
+            </Button>
+          </Link>
+        </Space>
       </div>
 
       <div className="page-actions">
         <Button type="primary" onClick={loadData}>
-          Tải lại dữ liệu
+          {t('homePage.reloadData')}
         </Button>
         <Button onClick={() => setLoading(true)}>
-          Hiển thị Loading
+          {t('homePage.showLoading')}
         </Button>
         <Button onClick={() => setError('Lỗi test')}>
-          Hiển thị Error
+          {t('homePage.showError')}
         </Button>
         <Button onClick={() => setEmpty(true)}>
-          Hiển thị Empty
+          {t('homePage.showEmpty')}
         </Button>
       </div>
 
@@ -75,7 +94,7 @@ const HomePage: React.FC = () => {
         onRetry={handleRetry}
       >
         <div className="products-section">
-          <Title level={2}>Sản phẩm nổi bật</Title>
+          <Title level={2}>{t('homePage.featuredProducts')}</Title>
           <Row gutter={[16, 16]}>
             {data.map((product) => (
               <Col xs={24} sm={12} md={8} key={product.id}>
@@ -84,9 +103,9 @@ const HomePage: React.FC = () => {
                   extra={<span className="price">{product.price}</span>}
                   hoverable
                 >
-                  <p>Mô tả sản phẩm...</p>
+                  <p>{t('products.productDescription')}</p>
                   <Button type="primary" block>
-                    Xem chi tiết
+                    {t('common.viewDetails')}
                   </Button>
                 </Card>
               </Col>

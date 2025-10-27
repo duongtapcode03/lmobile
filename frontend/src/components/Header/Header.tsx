@@ -1,65 +1,129 @@
+// @ts-nocheck
 import React, { useState } from 'react';
-import { SearchOutlined, ShoppingCartOutlined, UserOutlined, MenuOutlined } from '@ant-design/icons';
-import { Input, Button, Badge, Dropdown } from 'antd';
+import { SearchOutlined, ShoppingCartOutlined, UserOutlined, MenuOutlined, LogoutOutlined, SettingOutlined } from '@ant-design/icons';
+import { Input, Button, Badge, Dropdown, Avatar, message } from 'antd';
+import { useTranslation } from 'react-i18next';
+import { useDispatch, useSelector } from 'react-redux';
+import { Link, useNavigate } from 'react-router-dom';
+import { logout } from '../../features/auth/authSlice';
+import { authService } from '../../api/authService';
+import LanguageSwitcher from '../LanguageSwitcher';
 import './Header.scss';
 
 const Header: React.FC = () => {
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState('');
+  
+  // Get auth state from Redux
+  const isAuthenticated = useSelector((state) => state?.auth?.isAuthenticated || false);
+  const user = useSelector((state) => state?.auth?.user);
 
   const menuItems = [
     {
       key: 'phones',
-      label: 'Điện thoại',
+      label: t('menu.phones'),
       children: [
-        { key: 'iphone', label: 'iPhone' },
-        { key: 'samsung', label: 'Samsung' },
-        { key: 'xiaomi', label: 'Xiaomi' },
-        { key: 'oppo', label: 'OPPO' },
-        { key: 'vivo', label: 'vivo' },
+        { key: 'iphone', label: t('menu.iphone') },
+        { key: 'samsung', label: t('menu.samsung') },
+        { key: 'xiaomi', label: t('menu.xiaomi') },
+        { key: 'oppo', label: t('menu.oppo') },
+        { key: 'vivo', label: t('menu.vivo') },
       ]
     },
     {
       key: 'tablets',
-      label: 'Máy tính bảng',
+      label: t('menu.tablets'),
     },
     {
       key: 'laptops',
-      label: 'Laptop',
+      label: t('menu.laptops'),
     },
     {
       key: 'audio',
-      label: 'Âm thanh',
+      label: t('menu.audio'),
     },
     {
       key: 'watches',
-      label: 'Đồng hồ',
+      label: t('menu.watches'),
     },
     {
       key: 'accessories',
-      label: 'Phụ kiện',
+      label: t('menu.accessories'),
     },
     {
       key: 'home',
-      label: 'Đồ gia dụng',
+      label: t('menu.homeAppliances'),
     },
   ];
 
-  const userMenuItems = [
+  // @ts-ignore
+  const handleMenuClick = async (e) => {
+    if (e.key === 'login') {
+      navigate('/login');
+    } else if (e.key === 'register') {
+      navigate('/register');
+    } else if (e.key === 'profile') {
+      navigate('/profile');
+    } else if (e.key === 'orders') {
+      navigate('/orders');
+    } else if (e.key === 'settings') {
+      navigate('/settings');
+    } else if (e.key === 'logout') {
+      try {
+        await authService.logout();
+      } catch (err) {
+        console.error('Logout failed:', err);
+      } finally {
+        dispatch(logout());
+        message.success('Đăng xuất thành công!');
+        navigate('/');
+      }
+    }
+  };
+
+  // User menu items based on authentication status
+  const userMenuItems = isAuthenticated ? [
     {
-      key: 'login',
-      label: 'Đăng nhập',
-    },
-    {
-      key: 'register',
-      label: 'Đăng ký',
+      key: 'user-info',
+      label: (
+        <div style={{ padding: '8px 0', borderBottom: '1px solid #e5e7eb', marginBottom: '8px' }}>
+          <div style={{ fontWeight: 600, color: '#333' }}>{user?.name || 'User'}</div>
+          <div style={{ fontSize: '12px', color: '#999' }}>{user?.email || ''}</div>
+        </div>
+      ),
+      disabled: true,
     },
     {
       key: 'profile',
-      label: 'Tài khoản',
+      label: t('common.profile'),
+      icon: <UserOutlined />,
     },
     {
       key: 'orders',
-      label: 'Đơn hàng',
+      label: t('common.orders'),
+    },
+    {
+      key: 'settings',
+      label: 'Cài đặt',
+      icon: <SettingOutlined />,
+    },
+    { type: 'divider' },
+    {
+      key: 'logout',
+      label: 'Đăng xuất',
+      icon: <LogoutOutlined />,
+      danger: true,
+    },
+  ] : [
+    {
+      key: 'login',
+      label: t('common.login'),
+    },
+    {
+      key: 'register',
+      label: t('common.register'),
     },
   ];
 
@@ -69,9 +133,9 @@ const Header: React.FC = () => {
       <div className="header-banner">
         <div className="container">
           <div className="banner-content">
-            <span>Sản phẩm <strong>Chính hãng - Xuất VAT</strong> đầy đủ</span>
-            <span><strong>Giao nhanh - Miễn phí</strong> cho đơn 300k</span>
-            <span><strong>Thu cũ</strong> giá ngon - <strong>Lên đời</strong> tiết kiệm</span>
+            <span><strong>{t('banner.genuineProducts')}</strong></span>
+            <span><strong>{t('banner.fastShipping')}</strong></span>
+            <span><strong>{t('banner.tradeIn')}</strong></span>
           </div>
         </div>
       </div>
@@ -81,14 +145,14 @@ const Header: React.FC = () => {
         <div className="container">
           <div className="header-content">
             {/* Logo */}
-            <div className="logo">
+            <Link to="/" className="logo">
               <h1>LMobile</h1>
-            </div>
+            </Link>
 
             {/* Search bar */}
             <div className="search-container">
               <Input
-                placeholder="Tìm kiếm điện thoại, laptop, phụ kiện..."
+                placeholder={t('common.searchPlaceholder')}
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
                 prefix={<SearchOutlined />}
@@ -96,7 +160,7 @@ const Header: React.FC = () => {
                 size="large"
               />
               <Button type="primary" size="large" className="search-btn">
-                Tìm kiếm
+                {t('common.search')}
               </Button>
             </div>
 
@@ -104,14 +168,17 @@ const Header: React.FC = () => {
             <div className="header-actions">
               {/* Location */}
               <div className="location">
-                <span>Cửa hàng gần bạn</span>
+                <span>{t('common.nearbyStore')}</span>
               </div>
+
+              {/* Language Switcher */}
+              <LanguageSwitcher />
 
               {/* Cart */}
               <div className="cart">
                 <Badge count={0} showZero>
                   <Button type="text" icon={<ShoppingCartOutlined />} size="large">
-                    Giỏ hàng
+                    {t('common.cart')}
                   </Button>
                 </Badge>
               </div>
@@ -119,12 +186,24 @@ const Header: React.FC = () => {
               {/* User menu */}
               <div className="user-menu">
                 <Dropdown
-                  menu={{ items: userMenuItems }}
+                  menu={{ items: userMenuItems, onClick: handleMenuClick }}
                   placement="bottomRight"
                   trigger={['click']}
                 >
-                  <Button type="text" icon={<UserOutlined />} size="large">
-                    Đăng nhập
+                  <Button type="text" size="large" className="user-menu-button">
+                    {isAuthenticated ? (
+                      <div className="user-info">
+                        <Avatar style={{ backgroundColor: '#1890ff' }}>
+                          {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                        </Avatar>
+                        <span className="user-name">{user?.name || 'User'}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <UserOutlined />
+                        {t('common.login')}
+                      </>
+                    )}
                   </Button>
                 </Dropdown>
               </div>
@@ -145,26 +224,26 @@ const Header: React.FC = () => {
                 overlayClassName="category-dropdown"
               >
                 <Button type="text" icon={<MenuOutlined />} size="large">
-                  Danh mục
+                  {t('common.categories')}
                 </Button>
               </Dropdown>
 
               <div className="nav-links">
-                <a href="/phones">Điện thoại</a>
-                <a href="/tablets">Máy tính bảng</a>
-                <a href="/laptops">Laptop</a>
-                <a href="/audio">Âm thanh</a>
-                <a href="/watches">Đồng hồ</a>
-                <a href="/accessories">Phụ kiện</a>
-                <a href="/home">Đồ gia dụng</a>
+                <a href="/phones">{t('menu.phones')}</a>
+                <a href="/tablets">{t('menu.tablets')}</a>
+                <a href="/laptops">{t('menu.laptops')}</a>
+                <a href="/audio">{t('menu.audio')}</a>
+                <a href="/watches">{t('menu.watches')}</a>
+                <a href="/accessories">{t('menu.accessories')}</a>
+                <a href="/home">{t('menu.homeAppliances')}</a>
               </div>
             </div>
 
             <div className="nav-promotions">
-              <a href="/trade-in">Thu cũ đổi mới</a>
-              <a href="/used">Hàng cũ</a>
-              <a href="/promotions">Khuyến mãi</a>
-              <a href="/news">Tin công nghệ</a>
+              <a href="/trade-in">{t('menu.tradeInNew')}</a>
+              <a href="/used">{t('menu.usedItems')}</a>
+              <a href="/promotions">{t('menu.promotions')}</a>
+              <a href="/news">{t('menu.techNews')}</a>
             </div>
           </div>
         </div>

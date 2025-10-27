@@ -1,4 +1,5 @@
 import { userService } from "./user.service.js";
+import { otpService } from "./user.otp.service.js";
 
 export const userController = {
   register: async (req, res) => {
@@ -13,8 +14,14 @@ export const userController = {
   login: async (req, res) => {
     try {
       const { email, password } = req.body;
-      const result = await userService.login(email, password);
-      res.status(200).json(result);
+      const { user, accessToken, refreshToken } = await userService.login(email, password);
+      res.status(200).json({
+        user,
+        tokens: {
+          accessToken,
+          refreshToken
+        }
+      });
     } catch (error) {
       res.status(400).json({ message: error.message });
     }
@@ -85,6 +92,68 @@ export const userController = {
       res.json(users);
     } catch (error) {
       res.status(403).json({ message: error.message });
+    }
+  },
+
+  // OTP endpoints
+  sendOTP: async (req, res) => {
+    try {
+      const { email } = req.body;
+      const result = await otpService.sendOTP(email);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  },
+
+  verifyOTP: async (req, res) => {
+    try {
+      const { email, otp } = req.body;
+      const result = await otpService.verifyOTP(email, otp);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  },
+
+  resendOTP: async (req, res) => {
+    try {
+      const { email } = req.body;
+      const result = await otpService.resendOTP(email);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  },
+
+  // Password reset endpoints
+  forgotPassword: async (req, res) => {
+    try {
+      const { email } = req.body;
+      const result = await userService.forgotPassword(email);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  },
+
+  resetPassword: async (req, res) => {
+    try {
+      const { token, password } = req.body;
+      const result = await userService.resetPassword(token, password);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  },
+
+  verifyResetToken: async (req, res) => {
+    try {
+      const { token } = req.params;
+      const result = await userService.verifyResetToken(token);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
     }
   },
 };

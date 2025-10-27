@@ -13,6 +13,11 @@ const userSchema = new mongoose.Schema(
     refreshTokens: [{ type: String }],
     isActive: { type: Boolean, default: true },
     lastLogin: { type: Date },
+    emailVerified: { type: Boolean, default: false },
+    otp: { type: String },
+    otpExpires: { type: Date },
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
   },
   { timestamps: true }
 );
@@ -20,6 +25,8 @@ const userSchema = new mongoose.Schema(
 // 🔐 Auto encrypt password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
+  // Skip encryption for temporary password
+  if (this.password === 'temp') return next();
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();
