@@ -1,159 +1,101 @@
 import { userService } from "./user.service.js";
 import { otpService } from "./user.otp.service.js";
+import { catchAsync } from "../../core/middleware/errorHandler.js";
+import { successResponse, createdResponse } from "../../core/utils/response.js";
 
 export const userController = {
-  register: async (req, res) => {
-    try {
-      const result = await userService.register(req.body);
-      res.status(201).json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  register: catchAsync(async (req, res) => {
+    const result = await userService.register(req.body);
+    createdResponse(res, result, "Đăng ký thành công");
+  }),
 
-  login: async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      const { user, accessToken, refreshToken } = await userService.login(email, password);
-      res.status(200).json({
-        user,
-        tokens: {
-          accessToken,
-          refreshToken
-        }
-      });
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  login: catchAsync(async (req, res) => {
+    const { email, password } = req.body;
+    const { user, accessToken, refreshToken } = await userService.login(email, password);
+    successResponse(res, {
+      user,
+      tokens: {
+        accessToken,
+        refreshToken
+      }
+    }, "Đăng nhập thành công");
+  }),
 
-  profile: async (req, res) => {
-    try {
-      const user = await userService.getProfile(req.user.id);
-      res.json(user);
-    } catch (error) {
-      res.status(401).json({ message: "Unauthorized" });
-    }
-  },
+  profile: catchAsync(async (req, res) => {
+    const user = await userService.getProfile(req.user.id);
+    successResponse(res, user);
+  }),
 
-  updateProfile: async (req, res) => {
-    try {
-      const user = await userService.updateProfile(req.user.id, req.body);
-      res.json(user);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  updateProfile: catchAsync(async (req, res) => {
+    const user = await userService.updateProfile(req.user.id, req.body);
+    successResponse(res, user, "Cập nhật thông tin thành công");
+  }),
 
-  changePassword: async (req, res) => {
-    try {
-      const { currentPassword, newPassword } = req.body;
-      const result = await userService.changePassword(req.user.id, currentPassword, newPassword);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  changePassword: catchAsync(async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const result = await userService.changePassword(req.user.id, currentPassword, newPassword);
+    successResponse(res, result, "Đổi mật khẩu thành công");
+  }),
 
-  updateRole: async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const { role } = req.body;
-      const result = await userService.updateRole(userId, role, req.user.id);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  updateRole: catchAsync(async (req, res) => {
+    const { userId } = req.params;
+    const { role } = req.body;
+    const result = await userService.updateRole(userId, role, req.user.id);
+    successResponse(res, result, "Cập nhật vai trò thành công");
+  }),
 
-  refreshToken: async (req, res) => {
-    try {
-      const { refreshToken } = req.body;
-      const result = await userService.refreshToken(refreshToken);
-      res.json(result);
-    } catch (error) {
-      res.status(401).json({ message: error.message });
-    }
-  },
+  refreshToken: catchAsync(async (req, res) => {
+    const { refreshToken } = req.body;
+    const result = await userService.refreshToken(refreshToken);
+    successResponse(res, result, "Làm mới token thành công");
+  }),
 
-  logout: async (req, res) => {
-    try {
-      const { refreshToken } = req.body;
-      const result = await userService.logout(req.user.id, refreshToken);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  logout: catchAsync(async (req, res) => {
+    const { refreshToken } = req.body;
+    const result = await userService.logout(req.user.id, refreshToken);
+    successResponse(res, result, "Đăng xuất thành công");
+  }),
 
-  getAllUsers: async (req, res) => {
-    try {
-      const users = await userService.getAllUsers(req.user.id);
-      res.json(users);
-    } catch (error) {
-      res.status(403).json({ message: error.message });
-    }
-  },
+  getAllUsers: catchAsync(async (req, res) => {
+    const users = await userService.getAllUsers(req.user.id);
+    successResponse(res, users);
+  }),
 
   // OTP endpoints
-  sendOTP: async (req, res) => {
-    try {
-      const { email } = req.body;
-      const result = await otpService.sendOTP(email);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  sendOTP: catchAsync(async (req, res) => {
+    const { email } = req.body;
+    const result = await otpService.sendOTP(email);
+    successResponse(res, result, "Gửi OTP thành công");
+  }),
 
-  verifyOTP: async (req, res) => {
-    try {
-      const { email, otp } = req.body;
-      const result = await otpService.verifyOTP(email, otp);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  verifyOTP: catchAsync(async (req, res) => {
+    const { email, otp } = req.body;
+    const result = await otpService.verifyOTP(email, otp);
+    successResponse(res, result, "Xác thực OTP thành công");
+  }),
 
-  resendOTP: async (req, res) => {
-    try {
-      const { email } = req.body;
-      const result = await otpService.resendOTP(email);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  resendOTP: catchAsync(async (req, res) => {
+    const { email } = req.body;
+    const result = await otpService.resendOTP(email);
+    successResponse(res, result, "Gửi lại OTP thành công");
+  }),
 
   // Password reset endpoints
-  forgotPassword: async (req, res) => {
-    try {
-      const { email } = req.body;
-      const result = await userService.forgotPassword(email);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  forgotPassword: catchAsync(async (req, res) => {
+    const { email } = req.body;
+    const result = await userService.forgotPassword(email);
+    successResponse(res, result, "Email reset password đã được gửi");
+  }),
 
-  resetPassword: async (req, res) => {
-    try {
-      const { token, password } = req.body;
-      const result = await userService.resetPassword(token, password);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  resetPassword: catchAsync(async (req, res) => {
+    const { token, password } = req.body;
+    const result = await userService.resetPassword(token, password);
+    successResponse(res, result, "Đặt lại mật khẩu thành công");
+  }),
 
-  verifyResetToken: async (req, res) => {
-    try {
-      const { token } = req.params;
-      const result = await userService.verifyResetToken(token);
-      res.json(result);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
-    }
-  },
+  verifyResetToken: catchAsync(async (req, res) => {
+    const { token } = req.params;
+    const result = await userService.verifyResetToken(token);
+    successResponse(res, result);
+  }),
 };

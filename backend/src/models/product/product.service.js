@@ -1,21 +1,36 @@
 import { Product } from "./product.model.js";
 import { Category } from "../category/category.model.js";
+import { Brand } from "../brand/brand.model.js";
+import mongoose from "mongoose";
 
 export const productService = {
   // Tạo sản phẩm mới
   async createProduct(data) {
     try {
-      // Kiểm tra danh mục tồn tại
-      const category = await Category.findById(data.category);
-      if (!category) {
-        throw new Error("Danh mục không tồn tại");
+      // Kiểm tra brand tồn tại
+      if (data.brandRef) {
+        const brand = await Brand.findById(data.brandRef);
+        if (!brand) {
+          throw new Error("Thương hiệu không tồn tại");
+        }
+      } else {
+        throw new Error("brandRef là bắt buộc");
+      }
+
+      // Kiểm tra categories tồn tại (nếu có)
+      if (data.categoryRefs && data.categoryRefs.length > 0) {
+        const categories = await Category.find({ _id: { $in: data.categoryRefs } });
+        if (categories.length !== data.categoryRefs.length) {
+          throw new Error("Một hoặc nhiều danh mục không tồn tại");
+        }
       }
 
       const product = new Product(data);
       await product.save();
       
-      // Populate category info
-      await product.populate("category", "name slug");
+      // Populate brand và categories info
+      await product.populate("brandRef", "name slug logoUrl");
+      await product.populate("categoryRefs", "name slug");
       
       return product;
     } catch (error) {
@@ -49,25 +64,33 @@ export const productService = {
     // Xây dựng filter
     const filter = {};
     
-    // Tìm kiếm theo tên, mô tả, thương hiệu
+    // Tìm kiếm theo tên, mô tả, model
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
-        { brand: { $regex: search, $options: "i" } },
         { model: { $regex: search, $options: "i" } },
         { tags: { $in: [new RegExp(search, "i")] } }
       ];
     }
 
-    // Lọc theo danh mục
+    // Lọc theo danh mục (many-to-many: categoryRefs array)
     if (category) {
-      filter.category = category;
+      filter.categoryRefs = category;
     }
 
-    // Lọc theo thương hiệu
+    // Lọc theo thương hiệu (many-to-one: brandRef ObjectId)
     if (brand) {
-      filter.brand = { $regex: brand, $options: "i" };
+      // If brand is ObjectId, use directly
+      if (mongoose.Types.ObjectId.isValid(brand)) {
+        filter.brandRef = brand;
+      } else {
+        // If brand is name string, need to find brand first
+        const brandDoc = await Brand.findOne({ name: { $regex: brand, $options: "i" } });
+        if (brandDoc) {
+          filter.brandRef = brandDoc._id;
+        }
+      }
     }
 
     // Lọc theo giá
@@ -117,7 +140,8 @@ export const productService = {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const products = await Product.find(filter)
-      .populate("category", "name slug")
+      .populate("brandRef", "name slug logoUrl")
+      .populate("categoryRefs", "name slug")
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit));
@@ -138,7 +162,8 @@ export const productService = {
   // Lấy sản phẩm theo ID
   async getProductById(id) {
     const product = await Product.findById(id)
-      .populate("category", "name slug description");
+      .populate("brandRef", "name slug logoUrl description")
+      .populate("categoryRefs", "name slug description");
     
     if (!product) {
       throw new Error("Sản phẩm không tồn tại");
@@ -150,7 +175,8 @@ export const productService = {
   // Lấy sản phẩm theo slug
   async getProductBySlug(slug) {
     const product = await Product.findOne({ slug })
-      .populate("category", "name slug description");
+      .populate("brandRef", "name slug logoUrl description")
+      .populate("categoryRefs", "name slug description");
     
     if (!product) {
       throw new Error("Sản phẩm không tồn tại");
@@ -163,7 +189,7 @@ export const productService = {
   async updateProduct(id, updateData) {
     const allowedFields = [
       "name", "description", "shortDescription", "price", "originalPrice", 
-      "discount", "category", "brand", "model", "images", "thumbnail",
+      "discount", "brandRef", "categoryRefs", "model", "images", "thumbnail",
       "specifications", "variants", "stock", "tags", "isActive", 
       "isFeatured", "isNew", "isBestSeller", "warranty", 
       "metaTitle", "metaDescription", "seoKeywords"
@@ -176,11 +202,19 @@ export const productService = {
       }
     });
 
-    // Kiểm tra danh mục nếu có thay đổi
-    if (filteredData.category) {
-      const category = await Category.findById(filteredData.category);
-      if (!category) {
-        throw new Error("Danh mục không tồn tại");
+    // Kiểm tra brand nếu có thay đổi
+    if (filteredData.brandRef) {
+      const brand = await Brand.findById(filteredData.brandRef);
+      if (!brand) {
+        throw new Error("Thương hiệu không tồn tại");
+      }
+    }
+
+    // Kiểm tra categories nếu có thay đổi
+    if (filteredData.categoryRefs && filteredData.categoryRefs.length > 0) {
+      const categories = await Category.find({ _id: { $in: filteredData.categoryRefs } });
+      if (categories.length !== filteredData.categoryRefs.length) {
+        throw new Error("Một hoặc nhiều danh mục không tồn tại");
       }
     }
 
@@ -188,7 +222,9 @@ export const productService = {
       id,
       filteredData,
       { new: true, runValidators: true }
-    ).populate("category", "name slug");
+    )
+    .populate("brandRef", "name slug logoUrl")
+    .populate("categoryRefs", "name slug");
 
     if (!product) {
       throw new Error("Sản phẩm không tồn tại");
@@ -207,7 +243,7 @@ export const productService = {
     return { message: "Xóa sản phẩm thành công" };
   },
 
-  // Lấy sản phẩm theo danh mục
+  // Lấy sản phẩm theo danh mục (many-to-many)
   async getProductsByCategory(categoryId, query = {}) {
     const {
       page = 1,
@@ -216,14 +252,15 @@ export const productService = {
       sortOrder = "desc"
     } = query;
 
-    const filter = { category: categoryId, isActive: true };
+    const filter = { categoryRefs: categoryId, isActive: true };
     const sort = {};
     sort[sortBy] = sortOrder === "desc" ? -1 : 1;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const products = await Product.find(filter)
-      .populate("category", "name slug")
+      .populate("brandRef", "name slug logoUrl")
+      .populate("categoryRefs", "name slug")
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit));
@@ -247,7 +284,8 @@ export const productService = {
       isActive: true, 
       isFeatured: true 
     })
-    .populate("category", "name slug")
+    .populate("brandRef", "name slug logoUrl")
+    .populate("categoryRefs", "name slug")
     .sort({ createdAt: -1 })
     .limit(parseInt(limit));
   },
@@ -258,7 +296,8 @@ export const productService = {
       isActive: true, 
       isNew: true 
     })
-    .populate("category", "name slug")
+    .populate("brandRef", "name slug logoUrl")
+    .populate("categoryRefs", "name slug")
     .sort({ createdAt: -1 })
     .limit(parseInt(limit));
   },
@@ -269,26 +308,31 @@ export const productService = {
       isActive: true, 
       isBestSeller: true 
     })
-    .populate("category", "name slug")
+    .populate("brandRef", "name slug logoUrl")
+    .populate("categoryRefs", "name slug")
     .sort({ sold: -1 })
     .limit(parseInt(limit));
   },
 
-  // Lấy sản phẩm liên quan
+  // Lấy sản phẩm liên quan (dựa vào categoryRefs chung)
   async getRelatedProducts(productId, limit = 4) {
     const product = await Product.findById(productId);
     if (!product) {
       throw new Error("Sản phẩm không tồn tại");
     }
 
-    return Product.find({
+    // Tìm products có ít nhất 1 category chung
+    const relatedProducts = await Product.find({
       _id: { $ne: productId },
-      category: product.category,
+      categoryRefs: { $in: product.categoryRefs },
       isActive: true
     })
-    .populate("category", "name slug")
+    .populate("brandRef", "name slug logoUrl")
+    .populate("categoryRefs", "name slug")
     .sort({ rating: -1, sold: -1 })
     .limit(parseInt(limit));
+
+    return relatedProducts;
   },
 
   // Tìm kiếm sản phẩm
@@ -310,8 +354,19 @@ export const productService = {
     };
 
     // Thêm các filter khác
-    if (category) filter.category = category;
-    if (brand) filter.brand = { $regex: brand, $options: "i" };
+    if (category) filter.categoryRefs = category;
+    
+    if (brand) {
+      if (mongoose.Types.ObjectId.isValid(brand)) {
+        filter.brandRef = brand;
+      } else {
+        const brandDoc = await Brand.findOne({ name: { $regex: brand, $options: "i" } });
+        if (brandDoc) {
+          filter.brandRef = brandDoc._id;
+        }
+      }
+    }
+    
     if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = parseFloat(minPrice);
@@ -329,7 +384,8 @@ export const productService = {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const products = await Product.find(filter)
-      .populate("category", "name slug")
+      .populate("brandRef", "name slug logoUrl")
+      .populate("categoryRefs", "name slug")
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit));
@@ -432,14 +488,209 @@ export const productService = {
     };
   },
 
-  // Lấy danh sách thương hiệu
+  // Lấy danh sách thương hiệu từ Brand collection (không dùng distinct từ Product nữa)
   async getBrands() {
-    return Product.distinct("brand", { isActive: true }).sort();
+    return Brand.find({ isActive: true })
+      .select("name slug logoUrl")
+      .sort({ name: 1 });
   },
 
   // Lấy danh sách tags
   async getTags() {
     const tags = await Product.distinct("tags", { isActive: true });
     return tags.filter(tag => tag).sort();
+  },
+
+  // ==================== FLASH SALE METHODS ====================
+  
+  // Lấy tất cả sản phẩm flash sale đang active
+  async getFlashSaleProducts(query = {}) {
+    const {
+      page = 1,
+      limit = 20,
+      sortBy = "flashStartDate",
+      sortOrder = "asc"
+    } = query;
+
+    const now = new Date();
+    const filter = {
+      isFlashSale: true,
+      isActive: true,
+      flashStartDate: { $lte: now },
+      flashEndDate: { $gte: now },
+      $expr: { $lt: ["$flashSold", "$flashQuantity"] } // Còn hàng
+    };
+
+    const sort = {};
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const products = await Product.find(filter)
+      .populate("brandRef", "name slug logoUrl")
+      .populate("categoryRefs", "name slug")
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Product.countDocuments(filter);
+
+    return {
+      products,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit)),
+        totalItems: total,
+        itemsPerPage: parseInt(limit)
+      }
+    };
+  },
+
+  // Lấy flash sale sắp tới
+  async getUpcomingFlashSales(limit = 10) {
+    const now = new Date();
+    return Product.find({
+      isFlashSale: true,
+      isActive: true,
+      flashStartDate: { $gt: now }
+    })
+      .populate("brandRef", "name slug logoUrl")
+      .populate("categoryRefs", "name slug")
+      .sort({ flashStartDate: 1 })
+      .limit(parseInt(limit));
+  },
+
+  // Kiểm tra sản phẩm có flash sale và còn hàng không
+  async checkFlashSaleAvailability(productId, quantity = 1) {
+    const product = await Product.findById(productId);
+    
+    if (!product || !product.isFlashSale) {
+      return { available: false, reason: "Sản phẩm không có flash sale" };
+    }
+
+    const now = new Date();
+    const startDate = new Date(product.flashStartDate);
+    const endDate = new Date(product.flashEndDate);
+
+    // Kiểm tra thời gian
+    if (now < startDate) {
+      return { available: false, reason: "Flash sale chưa bắt đầu" };
+    }
+    if (now > endDate) {
+      return { available: false, reason: "Flash sale đã kết thúc" };
+    }
+
+    // Kiểm tra số lượng
+    const remaining = product.flashQuantity - (product.flashSold || 0);
+    if (remaining < quantity) {
+      return { 
+        available: false, 
+        reason: `Chỉ còn ${remaining} sản phẩm`,
+        remaining 
+      };
+    }
+
+    return { 
+      available: true, 
+      flashPrice: product.flashPrice,
+      remaining,
+      limitPerUser: product.flashLimitPerUser || 1
+    };
+  },
+
+  // Cập nhật số lượng đã bán flash sale
+  async updateFlashSaleSold(productId, quantity, operation = "add") {
+    const product = await Product.findById(productId);
+    if (!product || !product.isFlashSale) {
+      throw new Error("Sản phẩm không có flash sale");
+    }
+
+    if (operation === "add") {
+      product.flashSold = (product.flashSold || 0) + quantity;
+      if (product.flashSold > product.flashQuantity) {
+        product.flashSold = product.flashQuantity;
+      }
+    } else if (operation === "subtract") {
+      product.flashSold = Math.max(0, (product.flashSold || 0) - quantity);
+    } else {
+      product.flashSold = quantity;
+    }
+
+    // Auto-deactivate if sold out
+    if (product.flashSold >= product.flashQuantity) {
+      product.isFlashSale = false;
+    }
+
+    await product.save();
+    return product;
+  },
+
+  // Lấy thống kê flash sale
+  async getFlashSaleStats() {
+    const now = new Date();
+    
+    const active = await Product.countDocuments({
+      isFlashSale: true,
+      isActive: true,
+      flashStartDate: { $lte: now },
+      flashEndDate: { $gte: now }
+    });
+
+    const upcoming = await Product.countDocuments({
+      isFlashSale: true,
+      isActive: true,
+      flashStartDate: { $gt: now }
+    });
+
+    const ended = await Product.countDocuments({
+      isFlashSale: true,
+      flashEndDate: { $lt: now }
+    });
+
+    const soldOut = await Product.countDocuments({
+      isFlashSale: true,
+      $expr: { $gte: ["$flashSold", "$flashQuantity"] }
+    });
+
+    return {
+      active,
+      upcoming,
+      ended,
+      soldOut,
+      total: active + upcoming + ended
+    };
+  },
+
+  // Quick Sale Methods
+  // Lấy tất cả sản phẩm quick sale (cho homepage widget)
+  async getQuickSaleProducts(query = {}) {
+    const {
+      limit = 10,
+      sortBy = "quickSaleOrder",
+      sortOrder = "asc"
+    } = query;
+
+    const filter = {
+      isQuickSale: true,
+      isActive: true
+    };
+
+    const sort = {};
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+
+    const products = await Product.find(filter)
+      .populate("brandRef", "name slug logoUrl")
+      .populate("categoryRefs", "name slug")
+      .sort(sort)
+      .limit(parseInt(limit));
+
+    const total = await Product.countDocuments(filter);
+
+    return {
+      products,
+      total,
+      limit: parseInt(limit)
+    };
   }
 };
+

@@ -7,7 +7,7 @@ export const blogService = {
     try {
       const blog = new Blog(data);
       await blog.save();
-      
+    
       await blog.populate("author", "name email avatar");
       return blog;
     } catch (error) {

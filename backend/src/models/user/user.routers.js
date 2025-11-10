@@ -1,24 +1,59 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import { userController } from "./user.controller.js";
 import { protect, authorize } from "../../core/middleware/auth.middleware.js";
+import { userValidators } from "../../core/validators/user.validator.js";
+import { validate } from "../../core/validators/validator.js";
 
 const router = express.Router();
 
-// Public routes
-router.post("/send-otp", userController.sendOTP);
-router.post("/verify-otp", userController.verifyOTP);
-router.post("/resend-otp", userController.resendOTP);
-router.post("/register", userController.register);
-router.post("/login", userController.login);
+// Stricter rate limit cho auth routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: {
+    success: false,
+    message: 'Quá nhiều lần thử đăng nhập/đăng ký, vui lòng thử lại sau 15 phút.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Public routes với rate limiting
+router.post("/send-otp", authLimiter, userController.sendOTP);
+router.post("/verify-otp", authLimiter, userController.verifyOTP);
+router.post("/resend-otp", authLimiter, userController.resendOTP);
+router.post("/register", 
+  authLimiter, 
+  userValidators.register, 
+  validate, 
+  userController.register
+);
+router.post("/login", 
+  authLimiter, 
+  userValidators.login, 
+  validate, 
+  userController.login
+);
 router.post("/refresh-token", userController.refreshToken);
-router.post("/forgot-password", userController.forgotPassword);
-router.post("/reset-password", userController.resetPassword);
+router.post("/forgot-password", authLimiter, userController.forgotPassword);
+router.post("/reset-password", authLimiter, userController.resetPassword);
 router.get("/verify-reset-token/:token", userController.verifyResetToken);
 
 // Protected routes (require authentication)
 router.get("/profile", protect, userController.profile);
-router.put("/profile", protect, userController.updateProfile);
-router.put("/change-password", protect, userController.changePassword);
+router.put("/profile", 
+  protect, 
+  userValidators.updateProfile, 
+  validate, 
+  userController.updateProfile
+);
+router.put("/change-password", 
+  protect, 
+  userValidators.changePassword, 
+  validate, 
+  userController.changePassword
+);
 router.post("/logout", protect, userController.logout);
 
 // Admin only routes

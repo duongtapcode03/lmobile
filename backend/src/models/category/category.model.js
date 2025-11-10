@@ -59,11 +59,11 @@ const categorySchema = new mongoose.Schema(
   }
 );
 
-// Virtual để lấy số lượng sản phẩm trong danh mục
+// Virtual để lấy số lượng sản phẩm trong danh mục (many-to-many)
 categorySchema.virtual("productCount", {
   ref: "Product",
   localField: "_id",
-  foreignField: "category",
+  foreignField: "categoryRefs",
   count: true
 });
 
