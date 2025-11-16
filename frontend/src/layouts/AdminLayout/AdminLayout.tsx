@@ -39,8 +39,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const location = useLocation();
   const dispatch = useDispatch();
   
-  const user = useSelector((state: RootState) => (state.auth as any).user);
-  const isAuthenticated = useSelector((state: RootState) => (state.auth as any).isAuthenticated);
+  const user = useSelector((state: RootState) => state.auth.user);
 
   // Menu items
   const menuItems = [
@@ -143,7 +142,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       >
         <div className="admin-logo">
           <Link to="/admin">
-            {collapsed ? 'A' : 'Admin Panel'}
+            {collapsed ? 'QT' : 'Trang quản trị'}
           </Link>
         </div>
         <Menu

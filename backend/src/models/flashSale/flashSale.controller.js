@@ -2,10 +2,12 @@ import { flashSaleService } from "./flashSale.service.js";
 import { catchAsync } from "../../core/middleware/errorHandler.js";
 import { createdResponse, paginatedResponse, successResponse } from "../../core/utils/response.js";
 import { convertIdToNumber } from "../../core/middleware/convertId.middleware.js";
-import { protect, authorize } from "../../core/middleware/auth.middleware.js";
 
 export const flashSaleController = {
-  // Lấy tất cả flash sales (Admin - bao gồm cả đã hết hàng)
+  /**
+   * Lấy tất cả Flash Sale (Admin - bao gồm cả scheduled/active/ended)
+   * Public - chỉ lấy active
+   */
   getAll: catchAsync(async (req, res) => {
     // Nếu là admin và có query param admin=true, lấy tất cả
     if (req.user && req.user.role === 'admin' && req.query.admin === 'true') {
@@ -18,43 +20,122 @@ export const flashSaleController = {
     }
   }),
 
-  // Lấy flash sales theo session
-  getBySession: catchAsync(async (req, res) => {
-    const { sessionId } = req.params;
-    const result = await flashSaleService.getFlashSalesBySession(sessionId, req.query);
+  /**
+   * Lấy chi tiết Flash Sale với danh sách sản phẩm
+   */
+  getById: catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const includeItems = req.query.includeItems !== 'false';
+    const flashSale = await flashSaleService.getFlashSaleById(id, includeItems);
+    successResponse(res, flashSale);
+  }),
+
+  /**
+   * Lấy danh sách sản phẩm trong Flash Sale
+   */
+  getItems: catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const result = await flashSaleService.getFlashSaleItems(id, req.query);
     paginatedResponse(res, result.items, result.pagination);
   }),
 
-  // Kiểm tra flash sale availability
+  /**
+   * (1) TẠO FLASH SALE - Tạo khung thời gian Flash Sale (Admin only)
+   */
+  createFlashSale: catchAsync(async (req, res) => {
+    const data = {
+      ...req.body,
+      created_by: req.user._id
+    };
+    const flashSale = await flashSaleService.createFlashSale(data);
+    createdResponse(res, flashSale, "Tạo Flash Sale thành công");
+  }),
+
+  /**
+   * (2) THÊM SẢN PHẨM VÀO FLASH SALE (Admin only)
+   */
+  addProduct: catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const item = await flashSaleService.addProductToFlashSale(id, req.body);
+    createdResponse(res, item, "Thêm sản phẩm vào Flash Sale thành công");
+  }),
+
+  /**
+   * Cập nhật Flash Sale (Admin only)
+   */
+  updateFlashSale: catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const flashSale = await flashSaleService.updateFlashSale(id, req.body);
+    successResponse(res, flashSale, "Cập nhật Flash Sale thành công");
+  }),
+
+  /**
+   * (3) KIỂM SOÁT TRẠNG THÁI FLASH SALE (Admin only)
+   */
+  updateStatus: catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const flashSale = await flashSaleService.updateFlashSaleStatus(id, status);
+    successResponse(res, flashSale, "Cập nhật trạng thái Flash Sale thành công");
+  }),
+
+  /**
+   * Cập nhật Flash Sale Item (Admin only)
+   */
+  updateItem: catchAsync(async (req, res) => {
+    const { itemId } = req.params;
+    const item = await flashSaleService.updateFlashSaleItem(itemId, req.body);
+    successResponse(res, item, "Cập nhật sản phẩm Flash Sale thành công");
+  }),
+
+  /**
+   * Xóa sản phẩm khỏi Flash Sale (Admin only)
+   */
+  removeProduct: catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const { productId } = req.body;
+    const result = await flashSaleService.removeProductFromFlashSale(id, productId);
+    successResponse(res, null, result.message);
+  }),
+
+  /**
+   * Xóa Flash Sale (Admin only)
+   */
+  deleteFlashSale: catchAsync(async (req, res) => {
+    const { id } = req.params;
+    const result = await flashSaleService.deleteFlashSale(id);
+    successResponse(res, null, result.message);
+  }),
+
+  /**
+   * Kiểm tra availability của sản phẩm trong flash sale
+   */
   checkAvailability: catchAsync(async (req, res) => {
-    const { productId } = req.params;
+    const { id, productId } = req.params;
     const { quantity = 1 } = req.query;
-    const result = await flashSaleService.checkAvailability(productId, parseInt(quantity));
+    const userId = req.user ? req.user._id : null;
+    const result = await flashSaleService.checkAvailability(
+      id, 
+      productId, 
+      userId, 
+      parseInt(quantity)
+    );
     successResponse(res, result);
   }),
 
-  // Lấy thống kê flash sale
+  /**
+   * (4) THEO DÕI HIỆU SUẤT FLASH SALE (Admin only)
+   */
   getStats: catchAsync(async (req, res) => {
-    const stats = await flashSaleService.getStats();
-    successResponse(res, stats);
-  }),
-
-  // Tạo flash sale mới (Admin only)
-  create: catchAsync(async (req, res) => {
-    const item = await flashSaleService.create(req.body);
-    createdResponse(res, item, "Tạo flash sale thành công");
-  }),
-
-  // Cập nhật flash sale (Admin only)
-  update: catchAsync(async (req, res) => {
-    const item = await flashSaleService.update(req.params.id, req.body);
-    successResponse(res, item, "Cập nhật flash sale thành công");
-  }),
-
-  // Xóa flash sale (Admin only)
-  delete: catchAsync(async (req, res) => {
-    const result = await flashSaleService.delete(req.params.id);
-    successResponse(res, null, result.message);
+    const { id } = req.params;
+    if (id) {
+      // Stats cho 1 flash sale cụ thể
+      const stats = await flashSaleService.getFlashSaleStats(id);
+      successResponse(res, stats);
+    } else {
+      // Stats tổng quan
+      const stats = await flashSaleService.getAllStats();
+      successResponse(res, stats);
+    }
   })
 };
-

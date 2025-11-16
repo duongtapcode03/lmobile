@@ -12,7 +12,7 @@ const categorySchema = new mongoose.Schema(
     },
     name: { 
       type: String,
-      required: true,
+      required: true, 
       trim: true,
       maxlength: [100, "Tên danh mục không được quá 100 ký tự"],
       index: true

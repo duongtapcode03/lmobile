@@ -161,7 +161,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       >
         <div className="admin-logo">
           <Link to="/admin">
-            {collapsed ? 'A' : 'Admin Panel'}
+            {collapsed ? 'QT' : 'Trang quản trị'}
           </Link>
         </div>
         <Menu

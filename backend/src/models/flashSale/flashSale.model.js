@@ -1,112 +1,110 @@
 import mongoose from "mongoose";
 
 /**
- * Flash Sale Model
- * Sản phẩm trong flash sale
- * Collection name: flashsales
+ * Flash Sale Model - Bảng flash_sales
+ * Quản lý khung thời gian Flash Sale
  */
 const flashSaleSchema = new mongoose.Schema(
   {
-    id: {
-      type: Number,
-      required: true,
-      unique: true
-    },
-    session_id: {
+    name: {
       type: String,
       required: true,
       trim: true,
+      maxlength: [200, "Tên flash sale không được quá 200 ký tự"],
       index: true
     },
-    product_id: {
-      type: Number,
-      ref: "Product",
-      required: true,
-      index: true
-    },
-    flash_price: {
-      type: Number,
-      required: true,
-      min: [0, "Giá flash sale phải >= 0"],
-      index: true
-    },
-    total_stock: {
-      type: Number,
-      required: true,
-      min: [0, "Số lượng phải >= 0"],
-      default: 0
-    },
-    sold: {
-      type: Number,
-      min: [0, "Số lượng đã bán phải >= 0"],
-      default: 0
-    },
-    limit_per_user: {
-      type: Number,
-      min: [1, "Giới hạn mỗi người phải >= 1"],
-      default: 1
-    },
-    sort_order: {
-      type: Number,
-      default: 1,
-      min: [1, "Sort order phải >= 1"]
-    },
-    created_at: {
+    start_time: {
       type: Date,
-      default: Date.now
+      required: true,
+      index: true
     },
-    updated_at: {
+    end_time: {
       type: Date,
-      default: Date.now
+      required: true,
+      index: true,
+      validate: {
+        validator: function(value) {
+          return value > this.start_time;
+        },
+        message: "Thời gian kết thúc phải sau thời gian bắt đầu"
+      }
+    },
+    status: {
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
+      index: true
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: [1000, "Mô tả không được quá 1000 ký tự"]
+    },
+    created_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
     }
   },
   {
-    timestamps: false, // Sử dụng created_at và updated_at thủ công
-    // _id sẽ là ObjectId mặc định của MongoDB, id là field riêng để query
-    collection: "flashsales"
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
   }
 );
 
-// Indexes
-flashSaleSchema.index({ session_id: 1, sort_order: 1 });
-flashSaleSchema.index({ product_id: 1 });
-flashSaleSchema.index({ flash_price: 1 });
-flashSaleSchema.index({ id: 1 }, { unique: true });
-
-// Virtual: product info
-flashSaleSchema.virtual("product", {
-  ref: "Product",
-  localField: "product_id",
-  foreignField: "_id",
-  justOne: true
+// Virtual: Tính trạng thái thực tế (scheduled/active/ended)
+flashSaleSchema.virtual("actualStatus").get(function() {
+  const now = new Date();
+  if (now < this.start_time) {
+    return "scheduled";
+  } else if (now >= this.start_time && now <= this.end_time) {
+    return this.status === "active" ? "active" : "inactive";
+  } else {
+    return "ended";
+  }
 });
 
-// Methods
-flashSaleSchema.methods.isAvailable = function () {
-  return this.sold < this.total_stock;
-};
+// Virtual: Kiểm tra có đang active không
+flashSaleSchema.virtual("isActive").get(function() {
+  const now = new Date();
+  return this.status === "active" && 
+         now >= this.start_time && 
+         now <= this.end_time;
+});
 
-flashSaleSchema.methods.getRemainingStock = function () {
-  return Math.max(0, this.total_stock - this.sold);
-};
+// Virtual: Số lượng sản phẩm trong flash sale
+flashSaleSchema.virtual("itemsCount", {
+  ref: "FlashSaleItem",
+  localField: "_id",
+  foreignField: "flash_sale_id",
+  count: true
+});
 
-flashSaleSchema.methods.canPurchase = function (quantity = 1) {
-  return this.isAvailable() && quantity <= this.limit_per_user && quantity <= this.getRemainingStock();
-};
+// Virtual: Tổng số lượng đã bán
+flashSaleSchema.virtual("totalSold", {
+  ref: "FlashSaleItem",
+  localField: "_id",
+  foreignField: "flash_sale_id",
+  options: {
+    match: {}
+  }
+});
+
+// Indexes
+flashSaleSchema.index({ start_time: 1, end_time: 1 });
+flashSaleSchema.index({ status: 1, start_time: 1, end_time: 1 });
+flashSaleSchema.index({ created_by: 1 });
 
 // Pre-save middleware
-flashSaleSchema.pre("save", function (next) {
-  this.updated_at = Date.now();
-  
-  // Validate sold <= total_stock
-  if (this.sold > this.total_stock) {
-    return next(new Error("Số lượng đã bán không được vượt quá tổng số lượng"));
+flashSaleSchema.pre("save", function(next) {
+  // Tự động cập nhật status nếu đã qua thời gian
+  const now = new Date();
+  if (now > this.end_time && this.status === "active") {
+    // Có thể tự động set inactive nếu muốn
+    // this.status = "inactive";
   }
-  
   next();
 });
 
-const FlashSale = mongoose.model("FlashSale", flashSaleSchema, "flashsales");
-
-export default FlashSale;
-
+export const FlashSale = mongoose.model("FlashSale", flashSaleSchema);
