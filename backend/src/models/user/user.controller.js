@@ -11,9 +11,27 @@ export const userController = {
 
   login: catchAsync(async (req, res) => {
     const { email, password } = req.body;
+    
+    // Debug: Log request body để kiểm tra có role không
+    if (process.env.NODE_ENV === 'development' && req.body.role) {
+      console.warn('[Login Controller] Warning: Request body contains role field:', req.body.role);
+    }
+    
     const { user, accessToken, refreshToken } = await userService.login(email, password);
+    
+    // Trả về format đầy đủ: { user, tokens: { accessToken, refreshToken } }
+    // Backend và Frontend đều dùng role: "user", "seller", "admin"
     successResponse(res, {
-      user,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        emailVerified: user.emailVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
       tokens: {
         accessToken,
         refreshToken
@@ -46,8 +64,22 @@ export const userController = {
 
   refreshToken: catchAsync(async (req, res) => {
     const { refreshToken } = req.body;
-    const result = await userService.refreshToken(refreshToken);
-    successResponse(res, result, "Làm mới token thành công");
+    const { accessToken, user } = await userService.refreshToken(refreshToken);
+    
+    // Trả về format nhất quán với login: { tokens: { accessToken }, user }
+    successResponse(res, {
+      tokens: {
+        accessToken
+      },
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        emailVerified: user.emailVerified,
+      }
+    }, "Làm mới token thành công");
   }),
 
   logout: catchAsync(async (req, res) => {

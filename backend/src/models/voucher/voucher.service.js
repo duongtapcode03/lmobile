@@ -1,7 +1,7 @@
 import { Voucher } from "./voucher.model.js";
+import { User } from "../user/user.model.js";
 import { Product } from "../product/product.model.js";
 import { Category } from "../category/category.model.js";
-import { User } from "../user/user.model.js";
 
 export const voucherService = {
   // Tạo voucher mới
@@ -150,15 +150,17 @@ export const voucherService = {
       }
     }
 
-    if (voucher.conditions.firstTimeOnly) {
-      const { Order } = await import("../order/order.model.js");
-      const hasUsedBefore = await Order.findOne({
-        user: userId,
-        couponCode: voucher.code
-      });
-      if (hasUsedBefore) {
-        throw new Error("Bạn đã sử dụng voucher này trước đó");
-      }
+    // Kiểm tra user đã sử dụng voucher này chưa (mỗi user chỉ được dùng 1 voucher 1 lần)
+    // Kiểm tra tất cả các order đã sử dụng voucher này, trừ các order đã bị hủy
+    const { Order } = await import("../order/order.model.js");
+    const hasUsedBefore = await Order.findOne({
+      user: userId,
+      couponCode: voucher.code,
+      // Loại trừ các order đã bị hủy (cho phép dùng lại nếu order bị hủy)
+      status: { $ne: "cancelled" }
+    });
+    if (hasUsedBefore) {
+      throw new Error("Bạn đã sử dụng voucher này trước đó. Mỗi voucher chỉ được sử dụng một lần.");
     }
 
     // Kiểm tra sản phẩm áp dụng
@@ -185,8 +187,12 @@ export const voucherService = {
 
     // Tính toán số tiền giảm giá
     let discountAmount = 0;
+    let discountPercent = 0;
+    let maxDiscount = voucher.maxDiscountAmount || null;
+    
     switch (voucher.type) {
       case "percentage":
+        discountPercent = voucher.value;
         discountAmount = (orderAmount * voucher.value) / 100;
         if (voucher.maxDiscountAmount && discountAmount > voucher.maxDiscountAmount) {
           discountAmount = voucher.maxDiscountAmount;
@@ -194,15 +200,26 @@ export const voucherService = {
         break;
       case "fixed_amount":
         discountAmount = voucher.value;
+        discountPercent = (discountAmount / orderAmount) * 100;
         break;
       case "free_shipping":
         discountAmount = 0; // Sẽ được xử lý riêng
+        discountPercent = 0;
         break;
     }
 
+    // Đảm bảo discountAmount không vượt quá orderAmount
+    discountAmount = Math.min(discountAmount, orderAmount);
+    
+    // Tính finalPrice (giá sau khi giảm)
+    const finalPrice = orderAmount - discountAmount;
+
     return {
       voucher,
-      discountAmount: Math.min(discountAmount, orderAmount)
+      discountAmount,
+      discountPercent: Math.round(discountPercent * 100) / 100, // Làm tròn 2 chữ số
+      maxDiscount,
+      finalPrice
     };
   },
 
@@ -344,7 +361,92 @@ export const voucherService = {
       activeVouchers: 0,
       validVouchers: 0,
       expiredVouchers: 0,
-      totalUsage: 0
+    };
+  },
+
+  // Lưu voucher vào danh sách đã lưu của user
+  async saveVoucher(voucherId, userId) {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User không tồn tại");
+    }
+
+    const voucher = await Voucher.findById(voucherId);
+    if (!voucher) {
+      throw new Error("Voucher không tồn tại");
+    }
+
+    // Kiểm tra xem voucher đã được lưu chưa
+    if (user.savedVouchers && user.savedVouchers.includes(voucherId)) {
+      throw new Error("Voucher đã được lưu");
+    }
+
+    // Thêm voucher vào danh sách đã lưu
+    if (!user.savedVouchers) {
+      user.savedVouchers = [];
+    }
+    user.savedVouchers.push(voucherId);
+    await user.save();
+
+    return voucher;
+  },
+
+  // Bỏ lưu voucher
+  async removeSavedVoucher(voucherId, userId) {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User không tồn tại");
+    }
+
+    if (!user.savedVouchers || !user.savedVouchers.includes(voucherId)) {
+      throw new Error("Voucher chưa được lưu");
+    }
+
+    user.savedVouchers = user.savedVouchers.filter(
+      id => id.toString() !== voucherId.toString()
+    );
+    await user.save();
+
+    return { message: "Đã bỏ lưu voucher" };
+  },
+
+  // Lấy danh sách voucher đã lưu của user
+  async getSavedVouchers(userId) {
+    const user = await User.findById(userId).populate('savedVouchers');
+    if (!user) {
+      throw new Error("User không tồn tại");
+    }
+
+    return user.savedVouchers || [];
+  },
+
+  // Lấy danh sách voucher có sẵn (public, không cần auth)
+  async getAvailableVouchersPublic(query = {}) {
+    const { limit = 10, page = 1 } = query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const now = new Date();
+    const filter = {
+      isActive: true,
+      validFrom: { $lte: now },
+      validTo: { $gte: now },
+    };
+
+    const vouchers = await Voucher.find(filter)
+      .sort({ priority: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Voucher.countDocuments(filter);
+
+    return {
+      vouchers,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit)),
+        totalItems: total,
+        itemsPerPage: parseInt(limit)
+      }
     };
   }
 };

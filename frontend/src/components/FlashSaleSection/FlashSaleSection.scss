@@ -1,0 +1,192 @@
+.flash-sale-section {
+  margin-bottom: 32px;
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      .section-title {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+        color: #ff4d4f;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .anticon {
+          font-size: 28px;
+        }
+      }
+
+      .session-tag {
+        font-size: 14px;
+        padding: 4px 12px;
+        border-radius: 4px;
+      }
+    }
+
+    .view-all-link {
+      .view-all-button {
+        border-radius: 4px;
+      }
+    }
+  }
+
+  .flash-sales-loading {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+
+    .skeleton-item {
+      height: 300px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+  }
+
+  .flash-sales-scroll-container {
+    overflow: hidden;
+    position: relative;
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+
+  .flash-sales-scroll {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: #d9d9d9 transparent;
+
+    &::-webkit-scrollbar {
+      height: 6px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #d9d9d9;
+      border-radius: 3px;
+
+      &:hover {
+        background: #bfbfbf;
+      }
+    }
+
+    .flash-sale-item {
+      flex: 0 0 calc(25% - 12px);
+      min-width: 200px;
+      max-width: 250px;
+
+      @media (max-width: 1200px) {
+        flex: 0 0 calc(33.333% - 11px);
+      }
+
+      @media (max-width: 768px) {
+        flex: 0 0 calc(50% - 8px);
+        min-width: 180px;
+      }
+
+      @media (max-width: 480px) {
+        flex: 0 0 calc(50% - 8px);
+        min-width: 160px;
+      }
+    }
+  }
+
+  .flash-sale-product-wrapper {
+    position: relative;
+
+    .low-stock-badge,
+    .sold-out-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 10;
+      border-radius: 4px;
+    }
+
+    .sold-progress-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 8px;
+      z-index: 5;
+      border-radius: 0 0 8px 8px;
+
+      .progress-label {
+        color: #fff;
+        font-size: 11px;
+        text-align: center;
+        margin-bottom: 4px;
+        font-weight: 500;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 2px;
+        overflow: hidden;
+
+        .progress-fill {
+          height: 100%;
+          background: #ff4d4f;
+          transition: width 0.3s ease;
+        }
+      }
+    }
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .flash-sale-section {
+    .section-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+
+      .header-left {
+        width: 100%;
+      }
+
+      .view-all-link {
+        width: 100%;
+
+        .view-all-button {
+          width: 100%;
+        }
+      }
+    }
+  }
+}
+

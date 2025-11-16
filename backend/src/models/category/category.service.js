@@ -45,7 +45,12 @@ export const categoryService = {
       if (parentCategory === "null") {
         filter.parentCategory = null;
       } else {
-        filter.parentCategory = parentCategory;
+        const parentId = typeof parentCategory === 'number' 
+          ? parentCategory 
+          : parseInt(String(parentCategory), 10);
+        if (!isNaN(parentId)) {
+          filter.parentCategory = parentId;
+        }
       }
     }
 
@@ -76,12 +81,21 @@ export const categoryService = {
     };
   },
 
-  // Lấy danh mục theo ID
+  // Lấy danh mục theo ID (number)
   async getCategoryById(id) {
-    const category = await Category.findById(id)
+    const categoryId = typeof id === 'number' ? id : parseInt(String(id), 10);
+    if (isNaN(categoryId)) {
+      throw new Error("Category ID không hợp lệ");
+    }
+    const category = await Category.findOne({ _id: categoryId })
       .populate("parentCategory", "name slug")
       .populate("productCount")
-      .populate("subCategories", "name slug isActive");
+      .populate({
+        path: "subCategories",
+        select: "name slug isActive sortOrder",
+        match: { isActive: true },
+        options: { sort: { sortOrder: 1, name: 1 } }
+      });
     
     if (!category) {
       throw new Error("Danh mục không tồn tại");
@@ -95,7 +109,12 @@ export const categoryService = {
     const category = await Category.findOne({ slug })
       .populate("parentCategory", "name slug")
       .populate("productCount")
-      .populate("subCategories", "name slug isActive");
+      .populate({
+        path: "subCategories",
+        select: "name slug isActive sortOrder",
+        match: { isActive: true },
+        options: { sort: { sortOrder: 1, name: 1 } }
+      });
     
     if (!category) {
       throw new Error("Danh mục không tồn tại");
@@ -118,8 +137,23 @@ export const categoryService = {
       }
     });
 
-    const category = await Category.findByIdAndUpdate(
-      id,
+    const categoryId = typeof id === 'number' ? id : parseInt(String(id), 10);
+    if (isNaN(categoryId)) {
+      throw new Error("Category ID không hợp lệ");
+    }
+    
+    // Convert parentCategory to number if provided
+    if (filteredData.parentCategory !== undefined && filteredData.parentCategory !== null) {
+      filteredData.parentCategory = typeof filteredData.parentCategory === 'number' 
+        ? filteredData.parentCategory 
+        : parseInt(String(filteredData.parentCategory), 10);
+      if (isNaN(filteredData.parentCategory)) {
+        throw new Error("parentCategory phải là số");
+      }
+    }
+    
+    const category = await Category.findOneAndUpdate(
+      { _id: categoryId },
       filteredData,
       { new: true, runValidators: true }
     ).populate("parentCategory", "name slug");
@@ -133,21 +167,26 @@ export const categoryService = {
 
   // Xóa danh mục
   async deleteCategory(id) {
+    const categoryId = typeof id === 'number' ? id : parseInt(String(id), 10);
+    if (isNaN(categoryId)) {
+      throw new Error("Category ID không hợp lệ");
+    }
+    
     // Kiểm tra xem danh mục có sản phẩm không
     const { Product } = await import("../product/product.model.js");
-    const productCount = await Product.countDocuments({ category: id });
+    const productCount = await Product.countDocuments({ categoryRefs: categoryId });
     
     if (productCount > 0) {
       throw new Error("Không thể xóa danh mục có sản phẩm");
     }
 
     // Kiểm tra xem có danh mục con không
-    const subCategoryCount = await Category.countDocuments({ parentCategory: id });
+    const subCategoryCount = await Category.countDocuments({ parentCategory: categoryId });
     if (subCategoryCount > 0) {
       throw new Error("Không thể xóa danh mục có danh mục con");
     }
 
-    const category = await Category.findByIdAndDelete(id);
+    const category = await Category.findOneAndDelete({ _id: categoryId });
     if (!category) {
       throw new Error("Danh mục không tồn tại");
     }
@@ -167,8 +206,16 @@ export const categoryService = {
 
   // Lấy danh mục con theo danh mục cha
   async getSubCategories(parentId) {
+    const parentNumId = typeof parentId === 'number' 
+      ? parentId 
+      : parseInt(String(parentId), 10);
+    
+    if (isNaN(parentNumId)) {
+      throw new Error("Parent Category ID không hợp lệ");
+    }
+    
     return Category.find({ 
-      parentCategory: parentId, 
+      parentCategory: parentNumId, 
       isActive: true 
     })
     .populate("productCount")
@@ -185,9 +232,11 @@ export const categoryService = {
 
   // Cập nhật thứ tự sắp xếp
   async updateSortOrder(categories) {
-    const updatePromises = categories.map(({ id, sortOrder }) =>
-      Category.findByIdAndUpdate(id, { sortOrder })
-    );
+    const updatePromises = categories.map(({ id, sortOrder }) => {
+      const categoryId = typeof id === 'number' ? id : parseInt(String(id), 10);
+      if (isNaN(categoryId)) return null;
+      return Category.findOneAndUpdate({ _id: categoryId }, { sortOrder });
+    }).filter(p => p !== null);
     
     await Promise.all(updatePromises);
     return { message: "Cập nhật thứ tự thành công" };
@@ -195,7 +244,11 @@ export const categoryService = {
 
   // Toggle trạng thái active
   async toggleActive(id) {
-    const category = await Category.findById(id);
+    const categoryId = typeof id === 'number' ? id : parseInt(String(id), 10);
+    if (isNaN(categoryId)) {
+      throw new Error("Category ID không hợp lệ");
+    }
+    const category = await Category.findOne({ _id: categoryId });
     if (!category) {
       throw new Error("Danh mục không tồn tại");
     }

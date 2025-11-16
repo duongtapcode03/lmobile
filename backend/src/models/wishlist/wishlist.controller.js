@@ -4,10 +4,10 @@ import { successResponse } from "../../core/utils/response.js";
 
 export const wishlistController = {
   /**
-   * Lấy wishlist của user hiện tại
+   * Lấy wishlist của user hiện tại (hỗ trợ pagination)
    */
   getMyWishlist: catchAsync(async (req, res) => {
-    const wishlist = await wishlistService.getWishlist(req.user.id);
+    const wishlist = await wishlistService.getWishlist(req.user.id, req.query);
     successResponse(res, wishlist);
   }),
 
@@ -72,6 +72,15 @@ export const wishlistController = {
     const { isPublic } = req.body;
     const wishlist = await wishlistService.togglePublic(req.user.id, isPublic);
     successResponse(res, wishlist, isPublic ? "Wishlist đã được công khai" : "Wishlist đã được ẩn");
+  }),
+
+  /**
+   * Toggle product in wishlist - thêm nếu chưa có, xóa nếu đã có (API mới)
+   */
+  toggleProduct: catchAsync(async (req, res) => {
+    const { productId } = req.params;
+    const result = await wishlistService.toggleProduct(req.user.id, productId);
+    successResponse(res, result, result.message);
   })
 };
 

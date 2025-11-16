@@ -7,8 +7,14 @@ export const feedbackService = {
   async createFeedback(data) {
     const { user, product, order, rating, content, ...otherData } = data;
 
+    // Convert product to Number nếu là string
+    const productId = typeof product === 'string' ? parseInt(product, 10) : product;
+    if (isNaN(productId)) {
+      throw new Error("ID sản phẩm không hợp lệ");
+    }
+
     // Kiểm tra user đã đánh giá sản phẩm này chưa
-    const existingFeedback = await Feedback.findOne({ user, product });
+    const existingFeedback = await Feedback.findOne({ user, product: productId });
     if (existingFeedback) {
       throw new Error("Bạn đã đánh giá sản phẩm này rồi");
     }
@@ -18,7 +24,7 @@ export const feedbackService = {
       const orderExists = await Order.findOne({
         _id: order,
         user,
-        "items.product": product,
+        "items.product": productId,
         status: "delivered"
       });
       if (!orderExists) {
@@ -26,7 +32,12 @@ export const feedbackService = {
       }
     }
 
-    const feedback = new Feedback(data);
+    // Tạo feedback với productId đã convert
+    const feedbackData = {
+      ...data,
+      product: productId
+    };
+    const feedback = new Feedback(feedbackData);
     await feedback.save();
 
     await feedback.populate([
@@ -46,8 +57,10 @@ export const feedbackService = {
       product,
       user,
       rating,
-      status = "approved",
+      status,
       verified,
+      search,
+      searchText,
       sortBy = "createdAt",
       sortOrder = "desc"
     } = query;
@@ -56,7 +69,11 @@ export const feedbackService = {
     const filter = {};
     
     if (product) {
-      filter.product = product;
+      // Convert product to Number nếu là string
+      const productId = typeof product === 'string' ? parseInt(product, 10) : product;
+      if (!isNaN(productId)) {
+        filter.product = productId;
+      }
     }
 
     if (user) {
@@ -67,6 +84,7 @@ export const feedbackService = {
       filter.rating = parseInt(rating);
     }
 
+    // Chỉ filter theo status nếu có truyền vào (không có mặc định)
     if (status) {
       filter.status = status;
     }
@@ -82,16 +100,104 @@ export const feedbackService = {
     // Tính toán phân trang
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const feedbacks = await Feedback.find(filter)
-      .populate("user", "name email avatar")
-      .populate("product", "name price thumbnail slug")
-      .populate("order", "orderNumber")
-      .populate("response.respondedBy", "name email")
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
+    // Tìm kiếm theo product name hoặc user name (sử dụng aggregation)
+    let feedbacks;
+    let total;
+    
+    const searchQuery = search || searchText;
+    if (searchQuery) {
+      // Sử dụng aggregation để search trong populated fields
+      // Lấy collection name từ model
+      const Product = (await import("../product/product.model.js")).Product;
+      const User = (await import("../user/user.model.js")).User;
+      
+      const pipeline = [
+        {
+          $lookup: {
+            from: Product.collection.name,
+            localField: "product",
+            foreignField: "_id",
+            as: "productInfo"
+          }
+        },
+        {
+          $lookup: {
+            from: User.collection.name,
+            localField: "user",
+            foreignField: "_id",
+            as: "userInfo"
+          }
+        },
+        {
+          $unwind: {
+            path: "$productInfo",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $unwind: {
+            path: "$userInfo",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $match: {
+            ...filter,
+            $or: [
+              { "productInfo.name": { $regex: searchQuery, $options: "i" } },
+              { "userInfo.name": { $regex: searchQuery, $options: "i" } },
+              { "userInfo.email": { $regex: searchQuery, $options: "i" } },
+              { content: { $regex: searchQuery, $options: "i" } },
+              { title: { $regex: searchQuery, $options: "i" } }
+            ]
+          }
+        },
+        {
+          $sort: sort
+        },
+        {
+          $skip: skip
+        },
+        {
+          $limit: parseInt(limit)
+        }
+      ];
 
-    const total = await Feedback.countDocuments(filter);
+      const countPipeline = [
+        ...pipeline.slice(0, -3), // Bỏ skip và limit
+        {
+          $count: "total"
+        }
+      ];
+
+      const [results, countResult] = await Promise.all([
+        Feedback.aggregate(pipeline),
+        Feedback.aggregate(countPipeline)
+      ]);
+
+      total = countResult.length > 0 ? countResult[0].total : 0;
+      
+      // Populate thủ công vì aggregation không populate được
+      const feedbackIds = results.map(r => r._id);
+      feedbacks = await Feedback.find({ _id: { $in: feedbackIds } })
+        .populate("user", "name email avatar")
+        .populate("product", "name price thumbnail slug")
+        .populate("order", "orderNumber")
+        .populate("response.respondedBy", "name email")
+        .sort(sort);
+    } else {
+      // Không có search, dùng query thông thường
+      feedbacks = await Feedback.find(filter)
+        .populate("user", "name email avatar")
+        .populate("product", "name price thumbnail slug")
+        .populate("order", "orderNumber")
+        .populate("response.respondedBy", "name email")
+        .sort(sort)
+        .skip(skip)
+        .limit(parseInt(limit));
+
+      total = await Feedback.countDocuments(filter);
+    }
 
     return {
       feedbacks,
@@ -122,6 +228,11 @@ export const feedbackService = {
 
   // Lấy feedback theo sản phẩm
   async getFeedbackByProduct(productId, query = {}) {
+    // Convert productId to Number nếu là string
+    const productIdNum = typeof productId === 'string' ? parseInt(productId, 10) : productId;
+    if (isNaN(productIdNum)) {
+      throw new Error("ID sản phẩm không hợp lệ");
+    }
     const {
       page = 1,
       limit = 10,
@@ -132,7 +243,7 @@ export const feedbackService = {
     } = query;
 
     const filter = {
-      product: productId,
+      product: productIdNum,
       status: "approved"
     };
 
@@ -160,7 +271,7 @@ export const feedbackService = {
 
     // Tính thống kê rating
     const ratingStats = await Feedback.aggregate([
-      { $match: { product: productId, status: "approved" } },
+      { $match: { product: productIdNum, status: "approved" } },
       {
         $group: {
           _id: "$rating",
@@ -171,7 +282,7 @@ export const feedbackService = {
     ]);
 
     const averageRating = await Feedback.aggregate([
-      { $match: { product: productId, status: "approved" } },
+      { $match: { product: productIdNum, status: "approved" } },
       {
         $group: {
           _id: null,
@@ -392,7 +503,14 @@ export const feedbackService = {
 
   // Lấy thống kê feedback
   async getFeedbackStats(productId = null) {
-    const filter = productId ? { product: productId } : {};
+    let filter = {};
+    if (productId) {
+      // Convert productId to Number nếu là string
+      const productIdNum = typeof productId === 'string' ? parseInt(productId, 10) : productId;
+      if (!isNaN(productIdNum)) {
+        filter = { product: productIdNum };
+      }
+    }
 
     const stats = await Feedback.aggregate([
       { $match: filter },

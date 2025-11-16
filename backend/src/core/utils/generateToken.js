@@ -1,20 +1,20 @@
 import jwt from "jsonwebtoken";
 
-// Generate access token (short-lived)
+// Generate access token (1 month)
 export const generateAccessToken = (userId, role) => {
   return jwt.sign(
     { id: userId, role, type: "access" },
     process.env.JWT_SECRET,
-    { expiresIn: "15m" }
+    { expiresIn: "30d" } // 1 tháng
   );
 };
 
-// Generate refresh token (long-lived)
+// Generate refresh token (1 year)
 export const generateRefreshToken = (userId, role) => {
   return jwt.sign(
     { id: userId, role, type: "refresh" },
     process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
-    { expiresIn: "7d" }
+    { expiresIn: "365d" } // 1 năm
   );
 };
 

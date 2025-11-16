@@ -8,7 +8,18 @@ export const addressValidators = {
     
     body('phone')
       .notEmpty().withMessage('Số điện thoại là bắt buộc')
-      .isMobilePhone('vi-VN').withMessage('Số điện thoại không hợp lệ'),
+      .matches(/^[0-9]{8,11}$/).withMessage('Số điện thoại phải có 8-11 chữ số')
+      .custom((value) => {
+        // Cho phép số điện thoại Việt Nam: bắt đầu bằng 0 (10-11 chữ số)
+        if (value.startsWith('0') && value.length >= 10) {
+          return true;
+        }
+        // Cho phép số điện thoại quốc tế hoặc số test (8-11 chữ số, không bắt đầu bằng 0)
+        if (/^[1-9][0-9]{7,10}$/.test(value)) {
+          return true;
+        }
+        throw new Error('Số điện thoại không hợp lệ');
+      }),
     
     body('address')
       .notEmpty().withMessage('Địa chỉ là bắt buộc')
@@ -45,7 +56,19 @@ export const addressValidators = {
     
     body('phone')
       .optional()
-      .isMobilePhone('vi-VN').withMessage('Số điện thoại không hợp lệ'),
+      .matches(/^[0-9]{8,11}$/).withMessage('Số điện thoại phải có 8-11 chữ số')
+      .custom((value) => {
+        if (!value) return true; // Optional field
+        // Cho phép số điện thoại Việt Nam: bắt đầu bằng 0 (10-11 chữ số)
+        if (value.startsWith('0') && value.length >= 10) {
+          return true;
+        }
+        // Cho phép số điện thoại quốc tế hoặc số test (8-11 chữ số, không bắt đầu bằng 0)
+        if (/^[1-9][0-9]{7,10}$/.test(value)) {
+          return true;
+        }
+        throw new Error('Số điện thoại không hợp lệ');
+      }),
     
     body('address')
       .optional()

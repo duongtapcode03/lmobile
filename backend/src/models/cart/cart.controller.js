@@ -17,10 +17,10 @@ export const cartController = {
     }
   },
 
-  // Thêm sản phẩm vào giỏ hàng
+  // Thêm sản phẩm vào giỏ hàng (API mới - chỉ cần productId, quantity, và optional variantId)
   addToCart: async (req, res) => {
     try {
-      const { productId, quantity, variant } = req.body;
+      const { productId, quantity = 1, variantId } = req.body;
       
       if (!productId) {
         return res.status(400).json({
@@ -29,10 +29,17 @@ export const cartController = {
         });
       }
 
+      if (quantity < 1 || quantity > 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Số lượng phải từ 1 đến 10"
+        });
+      }
+
       const cart = await cartService.addToCart(req.user.id, {
         productId,
-        quantity,
-        variant
+        quantity: parseInt(quantity, 10),
+        variantId: variantId ? parseInt(variantId, 10) : undefined
       });
 
       res.json({

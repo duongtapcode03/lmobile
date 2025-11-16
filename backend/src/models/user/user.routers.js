@@ -1,5 +1,5 @@
 import express from "express";
-import rateLimit from "express-rate-limit";
+// import rateLimit from "express-rate-limit"; // Disabled - rate limiting is off
 import { userController } from "./user.controller.js";
 import { protect, authorize } from "../../core/middleware/auth.middleware.js";
 import { userValidators } from "../../core/validators/user.validator.js";
@@ -8,6 +8,9 @@ import { validate } from "../../core/validators/validator.js";
 const router = express.Router();
 
 // Stricter rate limit cho auth routes
+// DISABLED - Rate limiting is disabled in all environments
+// Uncomment below to enable rate limiting
+/*
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // limit each IP to 5 requests per windowMs
@@ -18,8 +21,11 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+*/
+// Skip rate limiting - no-op middleware
+const authLimiter = (req, res, next) => next();
 
-// Public routes với rate limiting
+// Public routes với rate limiting (disabled in development)
 router.post("/send-otp", authLimiter, userController.sendOTP);
 router.post("/verify-otp", authLimiter, userController.verifyOTP);
 router.post("/resend-otp", authLimiter, userController.resendOTP);

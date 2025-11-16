@@ -6,7 +6,7 @@ const userSchema = new mongoose.Schema(
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
-    role: { type: String, enum: ["customer", "seller", "admin"], default: "customer" },
+    role: { type: String, enum: ["user", "seller", "admin"], default: "user" },
     phone: { type: String },
     address: { type: String },
     avatar: { type: String },
@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema(
     otpExpires: { type: Date },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
+    savedVouchers: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Voucher'
+    }],
   },
   { timestamps: true }
 );

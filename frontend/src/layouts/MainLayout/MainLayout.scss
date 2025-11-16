@@ -32,21 +32,8 @@
   }
 }
 
-// Global styles for consistent spacing
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 16px;
-
-  @media (max-width: 1200px) {
-    max-width: 100%;
-    padding: 0 12px;
-  }
-
-  @media (max-width: 768px) {
-    padding: 0 8px;
-  }
-}
+// Container styles are now in global.scss
+// This ensures consistency across all components
 
 // Page transition animations
 .page-enter {

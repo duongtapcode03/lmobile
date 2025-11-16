@@ -4,7 +4,7 @@
  */
 
 export interface Brand {
-  _id?: string;
+  _id?: number; // Number ID instead of ObjectId string
   name: string;
   slug: string;
   logoUrl?: string | null;

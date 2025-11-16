@@ -1,0 +1,32 @@
+.seller-dashboard {
+  h1 {
+    margin-bottom: 24px;
+    font-size: 24px;
+    font-weight: 600;
+  }
+
+  .ant-card {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .ant-statistic-title {
+    font-size: 14px;
+    color: #8c8c8c;
+    margin-bottom: 8px;
+  }
+
+  .ant-statistic-content {
+    font-size: 24px;
+    font-weight: 600;
+  }
+
+  .ant-card-head {
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .ant-card-body {
+    padding: 24px;
+  }
+}
+

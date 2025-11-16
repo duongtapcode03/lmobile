@@ -15,9 +15,23 @@ body {
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 0 20px;
+  width: 100%;
+
+  @media (max-width: 1400px) {
+    max-width: 100%;
+    padding: 0 16px;
+  }
+
+  @media (max-width: 768px) {
+    padding: 0 12px;
+  }
+
+  @media (max-width: 480px) {
+    padding: 0 8px;
+  }
 }
 
 // Ant Design customizations - Green Theme
@@ -97,10 +111,6 @@ body {
 
 // Responsive utilities
 @media (max-width: 768px) {
-  .container {
-    padding: 0 15px;
-  }
-
   .main-content {
     padding: 20px 0;
 
@@ -115,10 +125,6 @@ body {
 }
 
 @media (max-width: 480px) {
-  .container {
-    padding: 0 10px;
-  }
-
   .main-content {
     padding: 15px 0;
 

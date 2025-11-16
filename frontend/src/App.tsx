@@ -1,28 +1,13 @@
 // @ts-nocheck
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { MainLayout, AuthLayout } from './layouts';
-import { HomePage, LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage } from './pages';
+import { BrowserRouter } from 'react-router-dom';
+import AppRouter from './router';
+import ScrollToTop from './components/ScrollToTop/ScrollToTop';
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* Auth routes */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        
-        {/* Main routes with MainLayout */}
-        <Route
-          path="/"
-          element={
-            <MainLayout>
-              <HomePage />
-            </MainLayout>
-          }
-        />
-      </Routes>
+      <ScrollToTop />
+      <AppRouter />
     </BrowserRouter>
   );
 }

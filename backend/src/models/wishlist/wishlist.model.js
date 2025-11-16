@@ -5,7 +5,7 @@ import mongoose from "mongoose";
  */
 const wishlistItemSchema = new mongoose.Schema({
   product: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: Number, // Product model sử dụng Number ID
     ref: "Product",
     required: true
   },
@@ -59,9 +59,14 @@ wishlistSchema.virtual("isEmpty").get(function() {
 
 // Virtual để kiểm tra sản phẩm đã có trong wishlist chưa
 wishlistSchema.methods.hasProduct = function(productId) {
-  return this.items.some(
-    item => item.product.toString() === productId.toString()
-  );
+  // Normalize productId to Number for comparison (Product model sử dụng Number ID)
+  const normalizedProductId = productId ? (typeof productId === 'number' ? productId : parseInt(productId.toString(), 10)) : null;
+  if (!normalizedProductId || isNaN(normalizedProductId)) return false;
+  
+  return this.items.some(item => {
+    const itemProductId = item.product ? (typeof item.product === 'number' ? item.product : parseInt(item.product.toString(), 10)) : null;
+    return itemProductId === normalizedProductId;
+  });
 };
 
 // Method để thêm sản phẩm vào wishlist
@@ -81,9 +86,16 @@ wishlistSchema.methods.addProduct = function(productId, note) {
 
 // Method để xóa sản phẩm khỏi wishlist
 wishlistSchema.methods.removeProduct = function(productId) {
-  const index = this.items.findIndex(
-    item => item.product.toString() === productId.toString()
-  );
+  // Normalize productId to Number for comparison (Product model sử dụng Number ID)
+  const normalizedProductId = productId ? (typeof productId === 'number' ? productId : parseInt(productId.toString(), 10)) : null;
+  if (!normalizedProductId || isNaN(normalizedProductId)) {
+    throw new Error("ProductId không hợp lệ");
+  }
+  
+  const index = this.items.findIndex(item => {
+    const itemProductId = item.product ? (typeof item.product === 'number' ? item.product : parseInt(item.product.toString(), 10)) : null;
+    return itemProductId === normalizedProductId;
+  });
   
   if (index === -1) {
     throw new Error("Sản phẩm không có trong wishlist");

@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const cartItemSchema = new mongoose.Schema({
   product: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: Number, // Number ID instead of ObjectId
     ref: "Product",
     required: true
   },
@@ -84,6 +84,12 @@ cartSchema.pre("save", function(next) {
   this.totalItems = this.items.reduce((total, item) => total + item.quantity, 0);
   this.totalAmount = this.items.reduce((total, item) => total + (item.price * item.quantity), 0);
   this.lastUpdated = new Date();
+  
+  // Reset shippingFee về 0 nếu cart trống (không có sản phẩm thì không cần tính phí vận chuyển)
+  if (this.items.length === 0) {
+    this.shippingFee = 0;
+  }
+  
   next();
 });
 

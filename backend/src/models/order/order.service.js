@@ -22,8 +22,18 @@ export const orderService = {
     }
 
     // Kiểm tra lại tồn kho và giá
+    const productMap = new Map(); // Lưu product info để dùng sau
     for (let item of cart.items) {
-      const product = await Product.findById(item.product);
+      // Đảm bảo product ID là Number
+      const productId = typeof item.product === 'number' 
+        ? item.product 
+        : (typeof item.product === 'object' ? item.product._id : parseInt(item.product, 10));
+      
+      if (isNaN(productId)) {
+        throw new Error(`Product ID không hợp lệ: ${item.product}`);
+      }
+
+      const product = await Product.findOne({ _id: productId });
       if (!product || !product.isActive) {
         throw new Error(`Sản phẩm ${item.productName || 'không xác định'} không còn bán`);
       }
@@ -33,7 +43,9 @@ export const orderService = {
       }
 
       // Cập nhật giá mới nhất
-      item.price = product.price;
+      item.price = product.priceNumber || product.price;
+      // Lưu product info để dùng khi tạo order items (sử dụng Number ID làm key)
+      productMap.set(productId, product);
     }
 
     // Tính phí vận chuyển
@@ -44,22 +56,59 @@ export const orderService = {
     );
 
     // Tạo items cho đơn hàng
-    const orderItems = cart.items.map(item => ({
-      product: item.product,
-      productName: item.product.name,
-      productImage: item.product.thumbnail || "",
-      quantity: item.quantity,
-      variant: item.variant,
-      price: item.price,
-      totalPrice: item.price * item.quantity
-    }));
+    const orderItems = cart.items.map(item => {
+      // item.product có thể là Number ID hoặc Product object (đã populate)
+      const productId = typeof item.product === 'number' 
+        ? item.product 
+        : (typeof item.product === 'object' ? item.product._id : parseInt(item.product, 10));
+      
+      // Lấy product từ Map (đảm bảo sử dụng Number ID)
+      const product = productMap.get(productId) || (typeof item.product === 'object' ? item.product : null);
+      
+      if (!product) {
+        throw new Error(`Không tìm thấy thông tin sản phẩm với ID: ${productId}`);
+      }
+      
+      return {
+        product: productId,
+        productName: product.name || 'Sản phẩm không xác định',
+        productImage: product.thumbnail || "",
+        quantity: item.quantity,
+        variant: item.variant,
+        price: item.price,
+        importPrice: product.importPrice || 0, // Lấy importPrice từ product
+        totalPrice: item.price * item.quantity
+      };
+    });
 
     // Tính tổng tiền
     const subtotal = orderItems.reduce((total, item) => total + item.totalPrice, 0);
     const totalAmount = subtotal + shippingFee - cart.discountAmount;
 
+    // Tạo orderNumber tự động (đảm bảo unique)
+    let orderNumber;
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 10) {
+      const timestamp = Date.now().toString().slice(-8);
+      const random = Math.random().toString(36).substr(2, 4).toUpperCase();
+      orderNumber = `ORD-${timestamp}-${random}`;
+      
+      // Kiểm tra xem orderNumber đã tồn tại chưa
+      const existingOrder = await Order.findOne({ orderNumber });
+      if (!existingOrder) {
+        isUnique = true;
+      }
+      attempts++;
+    }
+    
+    if (!isUnique) {
+      throw new Error("Không thể tạo orderNumber, vui lòng thử lại");
+    }
+
     // Tạo đơn hàng
     const order = new Order({
+      orderNumber, // Tự tạo orderNumber trước khi save
       user: userId,
       items: orderItems,
       shippingAddress,
@@ -85,14 +134,14 @@ export const orderService = {
 
     await order.save();
 
-    // Cập nhật tồn kho sản phẩm
+    // Cập nhật tồn kho sản phẩm (chỉ giảm stock, chưa tăng sold)
+    // sold sẽ được cập nhật khi đơn hàng chuyển sang trạng thái "delivered"
     for (let item of orderItems) {
-      await Product.findByIdAndUpdate(
-        item.product,
+      await Product.findOneAndUpdate(
+        { _id: item.product },
         { 
           $inc: { 
-            stock: -item.quantity,
-            sold: item.quantity 
+            stock: -item.quantity
           } 
         }
       );
@@ -101,27 +150,63 @@ export const orderService = {
     // Xóa giỏ hàng sau khi tạo đơn hàng thành công
     await cartService.clearCart(userId);
 
-    // Populate thông tin
+    // Populate thông tin (chỉ populate user, không populate items.product vì Product dùng Number ID)
     await order.populate([
-      { path: "user", select: "name email phone" },
-      { path: "items.product", select: "name thumbnail" }
+      { path: "user", select: "name email phone" }
     ]);
 
     return order;
   },
 
   // Lấy đơn hàng theo ID
-  async getOrderById(orderId, userId) {
-    const order = await Order.findOne({ 
-      _id: orderId, 
-      user: userId 
-    }).populate([
-      { path: "user", select: "name email phone" },
-      { path: "items.product", select: "name thumbnail slug" }
+  async getOrderById(orderId, userId, userRole = null) {
+    // Admin và Seller có thể xem bất kỳ đơn hàng nào
+    const filter = { _id: orderId };
+    if (!["admin", "seller"].includes(userRole)) {
+      filter.user = userId;
+    }
+
+    const order = await Order.findOne(filter).populate([
+      { path: "user", select: "name email phone" }
+      // Không populate items.product vì Product dùng Number ID
     ]);
 
     if (!order) {
       throw new Error("Đơn hàng không tồn tại");
+    }
+
+    // Populate importPrice từ product hiện tại cho các order items thiếu importPrice
+    if (order.items && order.items.length > 0) {
+      const productIds = order.items
+        .filter(item => !item.importPrice || item.importPrice === 0)
+        .map(item => {
+          // Đảm bảo product ID là Number
+          const productId = typeof item.product === 'number' ? item.product : parseInt(item.product, 10);
+          return isNaN(productId) ? null : productId;
+        })
+        .filter(id => id !== null);
+      
+      if (productIds.length > 0) {
+        const products = await Product.find({ _id: { $in: productIds } })
+          .select("_id importPrice");
+        
+        const productMap = new Map();
+        products.forEach(p => {
+          // Đảm bảo _id là Number khi set vào Map
+          const productId = typeof p._id === 'number' ? p._id : parseInt(p._id, 10);
+          productMap.set(productId, p.importPrice || 0);
+        });
+        
+        // Cập nhật importPrice cho các items thiếu (chỉ trong memory, không save)
+        order.items.forEach(item => {
+          if (!item.importPrice || item.importPrice === 0) {
+            const productId = typeof item.product === 'number' ? item.product : parseInt(item.product, 10);
+            if (!isNaN(productId) && productMap.has(productId)) {
+              item.importPrice = productMap.get(productId);
+            }
+          }
+        });
+      }
     }
 
     return order;
@@ -133,8 +218,8 @@ export const orderService = {
       orderNumber, 
       user: userId 
     }).populate([
-      { path: "user", select: "name email phone" },
-      { path: "items.product", select: "name thumbnail slug" }
+      { path: "user", select: "name email phone" }
+      // Không populate items.product vì Product dùng Number ID
     ]);
 
     if (!order) {
@@ -166,8 +251,8 @@ export const orderService = {
 
     const orders = await Order.find(filter)
       .populate([
-        { path: "user", select: "name email phone" },
-        { path: "items.product", select: "name thumbnail slug" }
+        { path: "user", select: "name email phone" }
+        // Không populate items.product vì Product dùng Number ID
       ])
       .sort(sort)
       .skip(skip)
@@ -187,7 +272,7 @@ export const orderService = {
   },
 
   // Cập nhật trạng thái đơn hàng
-  async updateOrderStatus(orderId, newStatus, userId, note = "") {
+  async updateOrderStatus(orderId, newStatus, userId, userRole = null, note = "") {
     const validStatuses = [
       "pending", "confirmed", "processing", 
       "shipping", "delivered", "cancelled", "returned"
@@ -202,9 +287,12 @@ export const orderService = {
       throw new Error("Đơn hàng không tồn tại");
     }
 
-    // Kiểm tra quyền (user chỉ có thể hủy đơn hàng của mình)
-    if (order.user.toString() !== userId && !["admin", "seller"].includes(userId.role)) {
-      throw new Error("Không có quyền cập nhật đơn hàng này");
+    // Kiểm tra quyền (admin và seller có thể cập nhật bất kỳ đơn hàng nào)
+    if (!["admin", "seller"].includes(userRole)) {
+      // User thường chỉ có thể cập nhật đơn hàng của mình
+      if (order.user.toString() !== userId.toString()) {
+        throw new Error("Không có quyền cập nhật đơn hàng này");
+      }
     }
 
     // Kiểm tra logic chuyển trạng thái
@@ -215,9 +303,31 @@ export const orderService = {
     const oldStatus = order.status;
     order.status = newStatus;
 
-    // Cập nhật thời gian giao hàng
+    // Cập nhật thời gian giao hàng và trạng thái thanh toán
     if (newStatus === "delivered") {
       order.deliveredAt = new Date();
+      
+      // Tự động cập nhật trạng thái thanh toán thành "paid" khi giao hàng thành công
+      // Đặc biệt quan trọng với COD (thanh toán khi nhận hàng)
+      if (order.paymentInfo.status === "pending") {
+        order.paymentInfo.status = "paid";
+        order.paymentInfo.paidAt = new Date();
+      }
+
+      // Cập nhật số lượng đã bán (sold) của sản phẩm khi đơn hàng được giao
+      // Chỉ cập nhật nếu đơn hàng chưa được giao trước đó (tránh cập nhật trùng lặp)
+      if (oldStatus !== "delivered") {
+        for (let item of order.items) {
+          await Product.findOneAndUpdate(
+            { _id: item.product },
+            { 
+              $inc: { 
+                sold: item.quantity 
+              } 
+            }
+          );
+        }
+      }
     }
 
     // Thêm vào lịch sử
@@ -229,24 +339,40 @@ export const orderService = {
 
     await order.save();
 
-    // Nếu hủy đơn hàng, hoàn lại tồn kho
-    if (newStatus === "cancelled" && oldStatus !== "cancelled") {
-      for (let item of order.items) {
-        await Product.findByIdAndUpdate(
-          item.product,
-          { 
-            $inc: { 
-              stock: item.quantity,
-              sold: -item.quantity 
-            } 
-          }
-        );
+    // Xử lý cập nhật stock và sold khi thay đổi trạng thái
+    if (newStatus === "cancelled" || newStatus === "returned") {
+      // Nếu đơn hàng đã được giao trước đó, cần giảm sold và hoàn lại stock
+      if (oldStatus === "delivered") {
+        for (let item of order.items) {
+          await Product.findOneAndUpdate(
+            { _id: item.product },
+            { 
+              $inc: { 
+                sold: -item.quantity,
+                stock: item.quantity // Hoàn lại tồn kho
+              } 
+            }
+          );
+        }
+      } 
+      // Nếu đơn hàng chưa được giao, chỉ hoàn lại stock (không giảm sold vì chưa tăng)
+      else if (oldStatus !== "cancelled" && oldStatus !== "returned") {
+        for (let item of order.items) {
+          await Product.findOneAndUpdate(
+            { _id: item.product },
+            { 
+              $inc: { 
+                stock: item.quantity
+              } 
+            }
+          );
+        }
       }
     }
 
+    // Populate thông tin (chỉ populate user, không populate items.product vì Product dùng Number ID)
     await order.populate([
-      { path: "user", select: "name email phone" },
-      { path: "items.product", select: "name thumbnail slug" }
+      { path: "user", select: "name email phone" }
     ]);
 
     return order;
@@ -342,12 +468,55 @@ export const orderService = {
 
     const orders = await Order.find(filter)
       .populate([
-        { path: "user", select: "name email phone" },
-        { path: "items.product", select: "name thumbnail slug" }
+        { path: "user", select: "name email phone" }
+        // Không populate items.product vì Product dùng Number ID
       ])
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit));
+
+    // Populate importPrice từ product hiện tại cho các order items thiếu importPrice
+    // Thu thập tất cả productIds từ tất cả orders để query một lần (tối ưu performance)
+    const allProductIds = new Set();
+    for (let order of orders) {
+      if (order.items && order.items.length > 0) {
+        order.items.forEach(item => {
+          if (!item.importPrice || item.importPrice === 0) {
+            const productId = typeof item.product === 'number' ? item.product : parseInt(item.product, 10);
+            if (!isNaN(productId)) {
+              allProductIds.add(productId);
+            }
+          }
+        });
+      }
+    }
+    
+    // Query tất cả products một lần
+    if (allProductIds.size > 0) {
+      const productIdsArray = Array.from(allProductIds);
+      const products = await Product.find({ _id: { $in: productIdsArray } })
+        .select("_id importPrice");
+      
+      const productMap = new Map();
+      products.forEach(p => {
+        const productId = typeof p._id === 'number' ? p._id : parseInt(p._id, 10);
+        productMap.set(productId, p.importPrice || 0);
+      });
+      
+      // Cập nhật importPrice cho tất cả items thiếu
+      for (let order of orders) {
+        if (order.items && order.items.length > 0) {
+          order.items.forEach(item => {
+            if (!item.importPrice || item.importPrice === 0) {
+              const productId = typeof item.product === 'number' ? item.product : parseInt(item.product, 10);
+              if (!isNaN(productId) && productMap.has(productId)) {
+                item.importPrice = productMap.get(productId);
+              }
+            }
+          });
+        }
+      }
+    }
 
     const total = await Order.countDocuments(filter);
 
@@ -404,17 +573,21 @@ export const orderService = {
   },
 
   // Hủy đơn hàng
-  async cancelOrder(orderId, userId, reason = "") {
-    return this.updateOrderStatus(orderId, "cancelled", userId, reason);
+  async cancelOrder(orderId, userId, userRole = null, reason = "") {
+    return this.updateOrderStatus(orderId, "cancelled", userId, userRole, reason);
   },
 
   // Xác nhận đơn hàng (Admin/Seller)
-  async confirmOrder(orderId, userId) {
-    return this.updateOrderStatus(orderId, "confirmed", userId, "Đơn hàng đã được xác nhận");
+  async confirmOrder(orderId, user) {
+    const userId = typeof user === 'string' ? user : user.id;
+    const userRole = typeof user === 'object' ? user.role : null;
+    return this.updateOrderStatus(orderId, "confirmed", userId, userRole, "Đơn hàng đã được xác nhận");
   },
 
   // Đánh dấu đã giao hàng
-  async markAsDelivered(orderId, userId) {
-    return this.updateOrderStatus(orderId, "delivered", userId, "Đơn hàng đã được giao");
+  async markAsDelivered(orderId, user) {
+    const userId = typeof user === 'string' ? user : user.id;
+    const userRole = typeof user === 'object' ? user.role : null;
+    return this.updateOrderStatus(orderId, "delivered", userId, userRole, "Đơn hàng đã được giao");
   }
 };

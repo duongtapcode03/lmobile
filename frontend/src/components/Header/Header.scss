@@ -36,6 +36,7 @@
     .header-content {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 20px;
 
       .logo {
@@ -62,10 +63,91 @@
         display: flex;
         gap: 8px;
         max-width: 600px;
+        margin: 0 auto;
+        position: relative;
 
-        .search-input {
+        .search-input-wrapper {
           flex: 1;
-          border-radius: 6px;
+          position: relative;
+
+          .search-input {
+            width: 100%;
+            border-radius: 6px;
+          }
+
+          .search-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            margin-top: 4px;
+            z-index: 1000;
+            max-height: 400px;
+            overflow-y: auto;
+
+            .search-dropdown-loading {
+              padding: 16px;
+              text-align: center;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 8px;
+              color: #666;
+            }
+
+            .search-dropdown-results {
+              .search-dropdown-item {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 16px;
+                cursor: pointer;
+                transition: background-color 0.2s;
+                border-bottom: 1px solid #f0f0f0;
+
+                &:last-child {
+                  border-bottom: none;
+                }
+
+                &:hover {
+                  background-color: #f5f5f5;
+                }
+
+                .search-dropdown-item-image {
+                  width: 60px;
+                  height: 60px;
+                  object-fit: cover;
+                  border-radius: 4px;
+                  flex-shrink: 0;
+                }
+
+                .search-dropdown-item-info {
+                  flex: 1;
+                  min-width: 0;
+
+                  .search-dropdown-item-name {
+                    font-size: 14px;
+                    color: #333;
+                    font-weight: 500;
+                    margin-bottom: 4px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                  }
+
+                  .search-dropdown-item-price {
+                    font-size: 16px;
+                    color: $primary-color;
+                    font-weight: 600;
+                  }
+                }
+              }
+            }
+          }
         }
 
         .search-btn {
@@ -95,7 +177,27 @@
           }
         }
 
+        .wishlist {
+          a {
+            text-decoration: none;
+            color: inherit;
+          }
+
+          .ant-btn {
+            color: #333;
+
+            &:hover {
+              color: $primary-color;
+            }
+          }
+        }
+
         .cart {
+          a {
+            text-decoration: none;
+            color: inherit;
+          }
+
           .ant-btn {
             color: #333;
             font-weight: 500;
@@ -142,6 +244,59 @@
           }
         }
       }
+    }
+  }
+
+  // Đảm bảo tất cả các item trong dropdown menu của user có styling nhất quán
+  .ant-dropdown-menu {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 4px 0;
+
+    .ant-dropdown-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: 14px;
+      transition: all 0.2s;
+      margin: 0;
+
+      .anticon {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      &:hover {
+        background-color: #f5f5f5;
+      }
+
+      &.ant-dropdown-menu-item-disabled {
+        cursor: default;
+        opacity: 1;
+        background-color: transparent;
+        
+        &:hover {
+          background-color: transparent;
+        }
+      }
+
+      &.ant-dropdown-menu-item-danger {
+        color: #ff4d4f;
+
+        &:hover {
+          color: #ff4d4f;
+          background-color: #fff1f0;
+        }
+      }
+    }
+
+    .ant-dropdown-menu-item-divider {
+      margin: 4px 0;
     }
   }
 
@@ -209,11 +364,8 @@
   }
 }
 
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-}
+// Container styles are now in global.scss
+// This ensures consistency across all components
 
 // Responsive design
 @media (max-width: 768px) {
@@ -230,10 +382,12 @@
       .header-content {
         flex-direction: column;
         gap: 15px;
+        justify-content: flex-start;
 
         .search-container {
           width: 100%;
           max-width: none;
+          margin: 0;
         }
 
         .header-actions {

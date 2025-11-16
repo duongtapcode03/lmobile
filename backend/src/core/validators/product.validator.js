@@ -7,12 +7,36 @@ export const productValidators = {
       .isLength({ min: 3, max: 200 }).withMessage('Tên sản phẩm phải từ 3-200 ký tự'),
     
     body('price')
-      .notEmpty().withMessage('Giá là bắt buộc')
-      .isString().withMessage('Giá phải là chuỗi'),
+      .optional()
+      .custom((value) => {
+        // Skip if empty/undefined/null
+        if (value === undefined || value === null || value === '') return true;
+        // Accept both string and number
+        return typeof value === 'string' || typeof value === 'number';
+      })
+      .withMessage('Giá phải là chuỗi hoặc số'),
+    
+    body('priceNumber')
+      .optional()
+      .custom((value) => {
+        // Accept number or numeric string, must be > 0
+        if (value === undefined || value === null) return true;
+        const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+        return !isNaN(numValue) && numValue > 0;
+      })
+      .withMessage('priceNumber phải là số dương'),
     
     body('brandRef')
       .notEmpty().withMessage('brandRef là bắt buộc')
-      .isMongoId().withMessage('brandRef phải là ObjectId hợp lệ'),
+      .custom((value) => {
+        // Accept both number and ObjectId string
+        if (typeof value === 'number' || !isNaN(Number(value))) {
+          return true;
+        }
+        // Also accept ObjectId format for backward compatibility
+        return /^[0-9a-fA-F]{24}$/.test(value);
+      })
+      .withMessage('brandRef phải là số hoặc ObjectId hợp lệ'),
     
     body('categoryRefs')
       .optional()
@@ -20,12 +44,23 @@ export const productValidators = {
       .custom((value) => {
         if (!value || value.length === 0) return true; // Optional, nhưng nếu có thì phải là array hợp lệ
         if (!Array.isArray(value)) return false;
-        return value.every(id => /^[0-9a-fA-F]{24}$/.test(id));
-      }).withMessage('categoryRefs phải chứa ObjectId hợp lệ'),
+        // Accept both numbers and ObjectId strings
+        return value.every(id => {
+          if (typeof id === 'number' || !isNaN(Number(id))) {
+            return true;
+          }
+          return /^[0-9a-fA-F]{24}$/.test(id);
+        });
+      }).withMessage('categoryRefs phải chứa số hoặc ObjectId hợp lệ'),
     
     body('sku')
       .optional()
-      .isAlphanumeric().withMessage('SKU chỉ được chứa chữ và số'),
+      .custom((value) => {
+        if (!value) return true; // Optional, skip if empty
+        // Allow alphanumeric with hyphens and underscores (e.g., "IPHONE-17-PRO-MAX")
+        return /^[a-zA-Z0-9_-]+$/.test(value);
+      })
+      .withMessage('SKU chỉ được chứa chữ, số, dấu gạch ngang và gạch dưới'),
     
     body('description')
       .optional()
@@ -33,19 +68,53 @@ export const productValidators = {
   ],
 
   update: [
-    param('id').isMongoId().withMessage('ID không hợp lệ'),
+    param('id')
+      .custom((value) => {
+        // Accept both number and ObjectId string
+        if (typeof value === 'number' || !isNaN(Number(value))) {
+          return true;
+        }
+        // Also accept ObjectId format for backward compatibility
+        return /^[0-9a-fA-F]{24}$/.test(value);
+      })
+      .withMessage('ID không hợp lệ'),
     
     body('name')
       .optional()
+      .notEmpty().withMessage('Tên sản phẩm không được để trống')
       .isLength({ min: 3, max: 200 }).withMessage('Tên sản phẩm phải từ 3-200 ký tự'),
     
     body('price')
       .optional()
-      .isString().withMessage('Giá phải là chuỗi'),
+      .custom((value) => {
+        // Skip if empty/undefined/null
+        if (value === undefined || value === null || value === '') return true;
+        // Accept both string and number
+        return typeof value === 'string' || typeof value === 'number';
+      })
+      .withMessage('Giá phải là chuỗi hoặc số'),
+    
+    body('priceNumber')
+      .optional()
+      .custom((value) => {
+        // Accept number or numeric string, must be > 0
+        if (value === undefined || value === null) return true;
+        const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+        return !isNaN(numValue) && numValue > 0;
+      })
+      .withMessage('priceNumber phải là số dương'),
     
     body('brandRef')
       .optional()
-      .isMongoId().withMessage('brandRef phải là ObjectId hợp lệ'),
+      .custom((value) => {
+        // Accept both number and ObjectId string
+        if (typeof value === 'number' || !isNaN(Number(value))) {
+          return true;
+        }
+        // Also accept ObjectId format for backward compatibility
+        return /^[0-9a-fA-F]{24}$/.test(value);
+      })
+      .withMessage('brandRef phải là số hoặc ObjectId hợp lệ'),
     
     body('categoryRefs')
       .optional()
@@ -53,12 +122,27 @@ export const productValidators = {
       .custom((value) => {
         if (!value || value.length === 0) return true;
         if (!Array.isArray(value)) return false;
-        return value.every(id => /^[0-9a-fA-F]{24}$/.test(id));
-      }).withMessage('categoryRefs phải chứa ObjectId hợp lệ'),
+        // Accept both numbers and ObjectId strings
+        return value.every(id => {
+          if (typeof id === 'number' || !isNaN(Number(id))) {
+            return true;
+          }
+          return /^[0-9a-fA-F]{24}$/.test(id);
+        });
+      }).withMessage('categoryRefs phải chứa số hoặc ObjectId hợp lệ'),
   ],
 
   getById: [
-    param('id').isMongoId().withMessage('ID không hợp lệ')
+    param('id')
+      .custom((value) => {
+        // Accept both number and ObjectId string
+        if (typeof value === 'number' || !isNaN(Number(value))) {
+          return true;
+        }
+        // Also accept ObjectId format for backward compatibility
+        return /^[0-9a-fA-F]{24}$/.test(value);
+      })
+      .withMessage('ID không hợp lệ')
   ],
 
   getBySlug: [

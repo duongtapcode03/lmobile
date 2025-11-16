@@ -54,7 +54,7 @@ export const orderController = {
   // Lấy đơn hàng theo ID
   getById: async (req, res) => {
     try {
-      const order = await orderService.getOrderById(req.params.id, req.user.id);
+      const order = await orderService.getOrderById(req.params.id, req.user.id, req.user.role);
       res.json({
         success: true,
         data: order
@@ -113,7 +113,7 @@ export const orderController = {
         });
       }
 
-      const order = await orderService.updateOrderStatus(orderId, status, req.user.id, note);
+      const order = await orderService.updateOrderStatus(orderId, status, req.user.id, req.user.role, note);
 
       res.json({
         success: true,
@@ -190,7 +190,7 @@ export const orderController = {
       const { orderId } = req.params;
       const { reason } = req.body;
 
-      const order = await orderService.cancelOrder(orderId, req.user.id, reason);
+      const order = await orderService.cancelOrder(orderId, req.user.id, req.user.role, reason);
 
       res.json({
         success: true,

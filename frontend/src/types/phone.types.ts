@@ -3,11 +3,18 @@
  * Types cho React frontend khi làm việc với phone data
  */
 
+import type { Brand } from './brand.types';
+import type { Category } from '../api/categoryService';
+
 export interface PhoneImage {
+  _id?: number;
+  productId?: number;
   url: string;
   highResUrl?: string;
   alt?: string;
   color?: string;
+  sortOrder?: number;
+  isPrimary?: boolean;
 }
 
 export interface ColorVariant {
@@ -16,9 +23,16 @@ export interface ColorVariant {
 }
 
 export interface PhoneVersion {
+  _id?: number;
+  productId?: number;
+  type?: 'storage' | 'color' | 'default' | 'other';
   sku?: string;
   label?: string;
   price?: string;
+  priceNumber?: number;
+  imageUrl?: string;
+  isDefault?: boolean;
+  sortOrder?: number;
 }
 
 export interface PhoneColor {
@@ -38,16 +52,17 @@ export interface ContentToc {
 }
 
 export interface PhoneDetail {
-  _id?: string;
+  _id?: number;
   name: string;
   sku: string;
-  brandRef: string; // Reference to Brand model (required, many-to-one)
-  categoryRefs?: string[]; // References to Category models (many-to-many)
+  brandRef: number | Brand; // Reference to Brand model - Number ID hoặc populated Brand object
+  categoryRefs?: number[] | Category[]; // References to Category models - Number IDs hoặc populated Category objects
   
   // Pricing
   price?: string | null;
   oldPrice?: string | null;
-  discount?: string | null;
+  discount?: number | null; // Giảm giá (%)
+  importPrice?: number; // Giá nhập
   memberPrice?: string | null;
   lastPrice?: string | null;
   discountRate?: string | null;
@@ -58,10 +73,17 @@ export interface PhoneDetail {
   
   // Product Details
   imageUrl?: string | null;
+  thumbnail?: string | null; // Thumbnail image URL
   availability: number;
   cpu?: string | null;
   storage?: string | null;
   screenSize?: string | null;
+  description?: string | null; // Mô tả chi tiết
+  shortDescription?: string | null; // Mô tả ngắn
+  
+  // Stock & Stats
+  stock?: number; // Số lượng tồn kho
+  sold?: number; // Số lượng đã bán
   
   // Nested Arrays
   images?: PhoneImage[];
@@ -83,6 +105,18 @@ export interface PhoneDetail {
   createdAt?: string | Date;
   updatedAt?: string | Date;
   
+  // Quick Sale fields
+  isQuickSale?: boolean;
+  quickSaleImageUrl?: string;
+  quickSaleTitle?: string;
+  quickSaleAlt?: string;
+  quickSaleUtmSource?: string;
+  quickSaleUtmMedium?: string;
+  quickSaleUtmCampaign?: string;
+  quickSaleOrder?: number;
+  slug?: string;
+  linkUrl?: string;
+  
   // Computed fields (from virtuals)
   priceNumber?: number;
   oldPriceNumber?: number;
@@ -99,17 +133,22 @@ export interface PhoneListResponse {
 }
 
 export interface PhoneFilter {
-  brand?: string[];
+  category?: number | string; // Category ID (number or string for backward compatibility)
+  brand?: number[] | string[]; // Brand IDs (numbers or strings for backward compatibility)
   minPrice?: number;
   maxPrice?: number;
   storage?: string[];
   cpu?: string[];
   availability?: number; // 0 = out of stock, 1 = in stock
   search?: string;
-  sortBy?: 'price' | 'name' | 'createdAt';
+  sortBy?: 'price' | 'name' | 'createdAt' | 'sold';
   sortOrder?: 'asc' | 'desc';
+  featured?: boolean | string; // Filter featured products
   page?: number;
   limit?: number;
+  // Additional filters (có thể được xử lý qua specifications)
+  nfc?: string[];
+  screenSize?: string[];
 }
 
 export interface PhoneStats {

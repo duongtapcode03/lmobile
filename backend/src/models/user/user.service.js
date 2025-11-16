@@ -53,11 +53,29 @@ export const userService = {
     const isMatch = await user.matchPassword(password);
     if (!isMatch) throw new Error("Sai mật khẩu");
 
-    const { accessToken, refreshToken } = generateTokens(user._id, user.role);
+    // Lưu role gốc để đảm bảo không bị thay đổi
+    const originalRole = user.role;
+    
+    // Validate role trước khi tiếp tục
+    const validRoles = ['user', 'seller', 'admin'];
+    if (!validRoles.includes(originalRole)) {
+      throw new Error(`Invalid role in database: ${originalRole}. Expected one of: ${validRoles.join(', ')}`);
+    }
+    
+    const { accessToken, refreshToken } = generateTokens(user._id, originalRole);
     await user.addRefreshToken(refreshToken);
     
     // Cập nhật thời gian đăng nhập cuối
     user.lastLogin = new Date();
+    
+    // Đảm bảo role vẫn là giá trị gốc từ database (defensive)
+    // Nếu role bị thay đổi từ đâu đó, restore lại
+    if (user.role !== originalRole) {
+      console.warn(`[Login] Role was modified from ${originalRole} to ${user.role}. Restoring original role.`);
+      user.role = originalRole;
+    }
+    
+    // Save với validation đầy đủ
     await user.save();
 
     return { user, accessToken, refreshToken };
@@ -104,7 +122,7 @@ export const userService = {
   },
 
   async updateRole(userId, newRole, adminId) {
-    const validRoles = ['customer', 'seller', 'admin'];
+    const validRoles = ['user', 'seller', 'admin'];
     if (!validRoles.includes(newRole)) {
       throw new Error("Vai trò không hợp lệ");
     }

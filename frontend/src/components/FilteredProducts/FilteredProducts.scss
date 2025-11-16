@@ -1,0 +1,31 @@
+.filtered-products {
+  width: 100%;
+
+  .products-grid {
+    margin-bottom: 32px;
+  }
+
+  .products-pagination {
+    display: flex;
+    justify-content: center;
+    padding: 24px 0;
+    border-top: 1px solid #e8e8e8;
+  }
+
+  &-loading,
+  &-error,
+  &-empty {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+    padding: 48px;
+  }
+}
+
+
+
+
+
+
+

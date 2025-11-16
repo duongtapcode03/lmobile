@@ -1,0 +1,53 @@
+.admin-users {
+  padding: 24px;
+  background: #fff;
+  border-radius: 8px;
+
+  .users-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
+
+    .page-title {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .ant-space {
+      flex-wrap: wrap;
+    }
+  }
+
+  .ant-table {
+    .ant-table-thead > tr > th {
+      background: #fafafa;
+      font-weight: 600;
+    }
+
+    .ant-table-tbody > tr:hover > td {
+      background: #f5f5f5;
+    }
+  }
+
+  .ant-modal {
+    .ant-descriptions-item-label {
+      font-weight: 600;
+      width: 200px;
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+

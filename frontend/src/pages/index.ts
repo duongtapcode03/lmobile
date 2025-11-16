@@ -1,5 +1,2 @@
-export { default as HomePage } from './HomePage/HomePage';
-export { default as LoginPage } from './LoginPage';
-export { default as RegisterPage } from './RegisterPage';
-export { default as ForgotPasswordPage } from './ForgotPasswordPage';
-export { default as ResetPasswordPage } from './ResetPasswordPage';
+// Only export ProductDetailPage as it's still used in router
+export { default as ProductDetailPage } from './ProductDetailPage';

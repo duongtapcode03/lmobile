@@ -184,5 +184,71 @@ export const voucherController = {
         message: error.message
       });
     }
+  },
+
+  // Lấy danh sách voucher có sẵn (public)
+  getAvailablePublic: async (req, res) => {
+    try {
+      const result = await voucherService.getAvailableVouchersPublic(req.query);
+      res.json({
+        success: true,
+        data: result.vouchers,
+        pagination: result.pagination
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  },
+
+  // Lưu voucher vào danh sách đã lưu
+  saveVoucher: async (req, res) => {
+    try {
+      const voucher = await voucherService.saveVoucher(req.params.id, req.user.id);
+      res.json({
+        success: true,
+        message: "Đã lưu voucher",
+        data: voucher
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  },
+
+  // Bỏ lưu voucher
+  removeSavedVoucher: async (req, res) => {
+    try {
+      const result = await voucherService.removeSavedVoucher(req.params.id, req.user.id);
+      res.json({
+        success: true,
+        message: result.message || "Đã bỏ lưu voucher"
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  },
+
+  // Lấy danh sách voucher đã lưu
+  getSavedVouchers: async (req, res) => {
+    try {
+      const vouchers = await voucherService.getSavedVouchers(req.user.id);
+      res.json({
+        success: true,
+        data: vouchers
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
   }
 };

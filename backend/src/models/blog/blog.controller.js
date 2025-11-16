@@ -23,6 +23,23 @@ export const blogController = {
     }
   },
 
+  // Lấy danh sách blog (API mới cho trang tin tức)
+  getList: async (req, res) => {
+    try {
+      const result = await blogService.getBlogList(req.query);
+      res.json({
+        success: true,
+        data: result.blogs,
+        pagination: result.pagination
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  },
+
   // Lấy tất cả blog
   getAll: async (req, res) => {
     try {

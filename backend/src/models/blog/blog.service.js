@@ -1,10 +1,21 @@
 import { Blog } from "./blog.model.js";
 import { Comment } from "../comment/comment.model.js";
+import mongoose from "mongoose";
 
 export const blogService = {
   // Tạo blog mới
   async createBlog(data) {
     try {
+      // Tự động cắt ngắn seoTitle nếu quá 70 ký tự
+      if (data.seoTitle && data.seoTitle.length > 70) {
+        data.seoTitle = data.seoTitle.substring(0, 67) + '...';
+      }
+      
+      // Tự động cắt ngắn seoDescription nếu quá 160 ký tự
+      if (data.seoDescription && data.seoDescription.length > 160) {
+        data.seoDescription = data.seoDescription.substring(0, 157) + '...';
+      }
+
       const blog = new Blog(data);
       await blog.save();
     
@@ -18,6 +29,47 @@ export const blogService = {
     }
   },
 
+  // Lấy danh sách blog (API mới cho trang tin tức)
+  async getBlogList(query = {}) {
+    const {
+      page = 1,
+      limit = 12,
+      sortBy = "publishedAt",
+      sortOrder = "desc"
+    } = query;
+
+    const filter = {
+      status: "published"
+    };
+
+    // Sort
+    const sort = {};
+    sort[sortBy] = sortOrder === "desc" ? -1 : 1;
+
+    // Pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const blogs = await Blog.find(filter)
+      .populate("author", "name email avatar")
+      .select("title slug excerpt featuredImage publishedAt viewCount likeCount")
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    const total = await Blog.countDocuments(filter);
+
+    return {
+      blogs,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit)),
+        totalItems: total,
+        itemsPerPage: parseInt(limit)
+      }
+    };
+  },
+
   // Lấy tất cả blog với phân trang và lọc
   async getAllBlogs(query = {}) {
     const {
@@ -25,11 +77,11 @@ export const blogService = {
       limit = 10,
       search = "",
       category,
-      status = "published",
+      status,
       author,
       isFeatured,
       isPinned,
-      sortBy = "publishedAt",
+      sortBy = "createdAt",
       sortOrder = "desc"
     } = query;
 
@@ -44,7 +96,9 @@ export const blogService = {
       filter.category = category;
     }
 
-    if (status) {
+    // Chỉ filter theo status nếu được chỉ định rõ ràng
+    // Nếu status = "all" hoặc không có, lấy tất cả
+    if (status && status !== "all") {
       filter.status = status;
     }
 
@@ -124,12 +178,23 @@ export const blogService = {
 
   // Cập nhật blog
   async updateBlog(id, updateData, userId) {
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new Error("ID blog không hợp lệ");
+    }
+
+    // Kiểm tra blog có tồn tại không trước khi update
+    const existingBlog = await Blog.findById(id);
+    if (!existingBlog) {
+      throw new Error("Blog không tồn tại");
+    }
+
     const allowedFields = [
       "title", "content", "excerpt", "category", "tags", 
       "featuredImage", "images", "status", "isFeatured", 
       "isPinned", "seoTitle", "seoDescription", "seoKeywords",
       "relatedProducts", "relatedBlogs", "allowComments", 
-      "isPublic", "scheduledAt"
+      "isPublic", "scheduledAt", "subtitle"
     ];
     
     const filteredData = {};
@@ -138,6 +203,16 @@ export const blogService = {
         filteredData[key] = updateData[key];
       }
     });
+
+    // Tự động cắt ngắn seoTitle nếu quá 70 ký tự
+    if (filteredData.seoTitle && filteredData.seoTitle.length > 70) {
+      filteredData.seoTitle = filteredData.seoTitle.substring(0, 67) + '...';
+    }
+    
+    // Tự động cắt ngắn seoDescription nếu quá 160 ký tự
+    if (filteredData.seoDescription && filteredData.seoDescription.length > 160) {
+      filteredData.seoDescription = filteredData.seoDescription.substring(0, 157) + '...';
+    }
 
     filteredData.lastModifiedBy = userId;
 
@@ -174,7 +249,7 @@ export const blogService = {
     const blog = await Blog.findByIdAndUpdate(
       id,
       { $inc: { viewCount: 1 } },
-      { new: true }
+      { new: true, runValidators: false }
     );
 
     if (!blog) {
@@ -189,7 +264,7 @@ export const blogService = {
     const blog = await Blog.findByIdAndUpdate(
       id,
       { $inc: { likeCount: 1 } },
-      { new: true }
+      { new: true, runValidators: false }
     );
 
     if (!blog) {
@@ -204,7 +279,7 @@ export const blogService = {
     const blog = await Blog.findByIdAndUpdate(
       id,
       { $inc: { likeCount: -1 } },
-      { new: true }
+      { new: true, runValidators: false }
     );
 
     if (!blog) {
@@ -219,7 +294,7 @@ export const blogService = {
     const blog = await Blog.findByIdAndUpdate(
       id,
       { $inc: { shareCount: 1 } },
-      { new: true }
+      { new: true, runValidators: false }
     );
 
     if (!blog) {
@@ -471,7 +546,7 @@ export const blogService = {
     }
 
     blog.isFeatured = !blog.isFeatured;
-    await blog.save();
+    await blog.save({ validateBeforeSave: false });
 
     return blog;
   },
@@ -484,7 +559,7 @@ export const blogService = {
     }
 
     blog.isPinned = !blog.isPinned;
-    await blog.save();
+    await blog.save({ validateBeforeSave: false });
 
     return blog;
   }

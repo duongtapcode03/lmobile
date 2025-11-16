@@ -54,10 +54,14 @@ export const brandService = {
   },
 
   /**
-   * Lấy brand theo ID
+   * Lấy brand theo ID (number)
    */
   async getBrandById(id) {
-    const brand = await Brand.findById(id);
+    const brandId = typeof id === 'number' ? id : parseInt(String(id), 10);
+    if (isNaN(brandId)) {
+      throw new Error("Brand ID không hợp lệ");
+    }
+    const brand = await Brand.findOne({ _id: brandId });
     if (!brand) {
       throw new Error("Không tìm thấy thương hiệu");
     }
@@ -89,8 +93,12 @@ export const brandService = {
    * Update brand
    */
   async updateBrand(id, data) {
-    const brand = await Brand.findByIdAndUpdate(
-      id,
+    const brandId = typeof id === 'number' ? id : parseInt(String(id), 10);
+    if (isNaN(brandId)) {
+      throw new Error("Brand ID không hợp lệ");
+    }
+    const brand = await Brand.findOneAndUpdate(
+      { _id: brandId },
       { $set: data },
       { new: true, runValidators: true }
     );
@@ -104,7 +112,11 @@ export const brandService = {
    * Delete brand
    */
   async deleteBrand(id) {
-    const brand = await Brand.findByIdAndDelete(id);
+    const brandId = typeof id === 'number' ? id : parseInt(String(id), 10);
+    if (isNaN(brandId)) {
+      throw new Error("Brand ID không hợp lệ");
+    }
+    const brand = await Brand.findOneAndDelete({ _id: brandId });
     if (!brand) {
       throw new Error("Không tìm thấy thương hiệu");
     }
@@ -115,13 +127,17 @@ export const brandService = {
    * Lấy statistics cho brand
    */
   async getBrandStats(id) {
-    const brand = await Brand.findById(id);
+    const brandId = typeof id === 'number' ? id : parseInt(String(id), 10);
+    if (isNaN(brandId)) {
+      throw new Error("Brand ID không hợp lệ");
+    }
+    const brand = await Brand.findOne({ _id: brandId });
     if (!brand) {
       throw new Error("Không tìm thấy thương hiệu");
     }
 
     const productCount = await Product.countDocuments({ 
-      brand: brand.name, 
+      brandRef: brandId, 
       isActive: true 
     });
 

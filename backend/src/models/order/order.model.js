@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const orderItemSchema = new mongoose.Schema({
   product: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: Number, // Product model sử dụng Number ID
     ref: "Product",
     required: true
   },
@@ -29,11 +29,18 @@ const orderItemSchema = new mongoose.Schema({
     required: true,
     min: [0, "Giá không được âm"]
   },
+  importPrice: {
+    type: Number,
+    default: 0,
+    min: [0, "Giá nhập không được âm"]
+  },
   totalPrice: {
     type: Number,
     required: true,
     min: [0, "Tổng giá không được âm"]
   }
+}, {
+  _id: false // Tắt _id tự động cho order items để tránh nhầm lẫn với product ID
 });
 
 const shippingAddressSchema = new mongoose.Schema({
@@ -225,12 +232,15 @@ const orderSchema = new mongoose.Schema(
 
 // Virtual để tính tổng số lượng sản phẩm
 orderSchema.virtual("totalItems").get(function() {
-  return this.items.reduce((total, item) => total + item.quantity, 0);
+  if (!this.items || !Array.isArray(this.items)) {
+    return 0;
+  }
+  return this.items.reduce((total, item) => total + (item.quantity || 0), 0);
 });
 
-// Virtual để kiểm tra có thể hủy không
+// Virtual để kiểm tra có thể hủy không (chỉ cho phép khi đang chờ xử lý)
 orderSchema.virtual("canCancel").get(function() {
-  return ["pending", "confirmed"].includes(this.status);
+  return this.status === "pending";
 });
 
 // Virtual để kiểm tra có thể trả hàng không

@@ -6,13 +6,16 @@ const router = express.Router();
 
 // Public routes (không cần xác thực)
 router.get("/code/:code", voucherController.getByCode);
-router.get("/available", voucherController.getAvailable);
+router.get("/available", voucherController.getAvailablePublic);
 
 // Protected routes (cần xác thực)
 router.use(protect);
 
 // User routes
 router.post("/validate", voucherController.validate);
+router.get("/saved", voucherController.getSavedVouchers);
+router.post("/:id/save", voucherController.saveVoucher);
+router.delete("/:id/save", voucherController.removeSavedVoucher);
 
 // Admin routes
 router.post("/", authorize("admin"), voucherController.create);

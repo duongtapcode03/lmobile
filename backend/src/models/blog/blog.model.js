@@ -47,13 +47,6 @@ const featuredImageSchema = new mongoose.Schema({
 
 const blogSchema = new mongoose.Schema(
   {
-    // From crawl data
-    url: {
-      type: String,
-      unique: true,
-      trim: true,
-      sparse: true // Allow null values but enforce uniqueness when present
-    },
     title: {
       type: String,
       required: true,
@@ -184,7 +177,14 @@ const blogSchema = new mongoose.Schema(
     seoTitle: {
       type: String,
       trim: true,
-      maxlength: [60, "SEO title không được quá 60 ký tự"]
+      maxlength: [70, "SEO title không được quá 70 ký tự"],
+      validate: {
+        validator: function(v) {
+          if (!v) return true; // Cho phép null/undefined
+          return v.length <= 70;
+        },
+        message: "SEO title không được quá 70 ký tự"
+      }
     },
     seoDescription: {
       type: String,
@@ -225,8 +225,24 @@ const blogSchema = new mongoose.Schema(
   },
   { 
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toJSON: { 
+      virtuals: true,
+      transform: function(doc, ret) {
+        if (ret._id) {
+          ret._id = ret._id.toString();
+        }
+        return ret;
+      }
+    },
+    toObject: { 
+      virtuals: true,
+      transform: function(doc, ret) {
+        if (ret._id) {
+          ret._id = ret._id.toString();
+        }
+        return ret;
+      }
+    }
   }
 );
 

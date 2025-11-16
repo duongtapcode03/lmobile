@@ -18,19 +18,51 @@ export const productController = {
 
   // Lấy sản phẩm theo ID
   getById: catchAsync(async (req, res) => {
-    const product = await productService.getProductById(req.params.id);
+    console.log('[Product Controller] getById called with id:', req.params.id, 'req.path:', req.path);
+    const { includeDetail, includeImages, includeVariants } = req.query;
+    const options = {
+      includeDetail: includeDetail === 'true' || includeDetail === true,
+      includeImages: includeImages === 'true' || includeImages === true,
+      includeVariants: includeVariants === 'true' || includeVariants === true
+    };
+    const product = await productService.getProductById(req.params.id, options);
     if (!product) {
       throw new AppError('Sản phẩm không tồn tại', 404);
     }
     successResponse(res, product);
   }),
 
+  // Lấy sản phẩm theo loại với pagination (API mới)
+  getByType: catchAsync(async (req, res) => {
+    const { type } = req.params;
+    const result = await productService.getProductsByType(type, req.query);
+    paginatedResponse(res, result.products, result.pagination);
+  }),
+
   // Lấy sản phẩm theo slug
   getBySlug: catchAsync(async (req, res) => {
-    const product = await productService.getProductBySlug(req.params.slug);
+    const { includeDetail, includeImages, includeVariants } = req.query;
+    const options = {
+      includeDetail: includeDetail === 'true' || includeDetail === true,
+      includeImages: includeImages === 'true' || includeImages === true,
+      includeVariants: includeVariants === 'true' || includeVariants === true
+    };
+    const product = await productService.getProductBySlug(req.params.slug, options);
     if (!product) {
       throw new AppError('Sản phẩm không tồn tại', 404);
     }
+    
+    // Flatten detail data into product object for backward compatibility
+    if (product.detail) {
+      product.description = product.detail.description;
+      product.highlights = product.detail.highlights;
+      product.promotions = product.detail.promotions;
+      product.warranty = product.detail.warranty;
+      product.specifications = product.detail.specifications;
+      product.contentToc = product.detail.contentToc;
+      product.sourceUrl = product.detail.sourceUrl;
+    }
+    
     successResponse(res, product);
   }),
 
@@ -48,7 +80,33 @@ export const productController = {
 
   // Lấy sản phẩm theo danh mục
   getByCategory: catchAsync(async (req, res) => {
-    const result = await productService.getProductsByCategory(req.params.categoryId, req.query);
+    console.log('[Product Controller] getByCategory called with categoryId:', req.params.categoryId);
+    console.log('[Product Controller] getByCategory query params:', req.query);
+    try {
+      const result = await productService.getProductsByCategory(req.params.categoryId, req.query);
+      paginatedResponse(res, result.products, result.pagination);
+    } catch (error) {
+      console.error('[Product Controller] getByCategory error:', error);
+      throw error;
+    }
+  }),
+
+  // Lấy sản phẩm theo categoryId (API mới cho CategorySidebar)
+  getByCategoryId: catchAsync(async (req, res) => {
+    console.log('[Product Controller] getByCategoryId called with categoryId:', req.params.categoryId);
+    const result = await productService.getProductsByCategoryId(req.params.categoryId, req.query);
+    paginatedResponse(res, result.products, result.pagination);
+  }),
+
+  // Lấy sản phẩm chỉ filter theo categoryRefs (đơn giản)
+  getByCategoryRefs: catchAsync(async (req, res) => {
+    const { categoryRefs } = req.query;
+    
+    if (!categoryRefs) {
+      throw new AppError("Vui lòng cung cấp categoryRefs (có thể là một ID hoặc nhiều ID phân cách bằng dấu phẩy)", 400);
+    }
+
+    const result = await productService.getProductsByCategoryRefs(categoryRefs, req.query);
     paginatedResponse(res, result.products, result.pagination);
   }),
 
@@ -89,6 +147,25 @@ export const productController = {
 
     const result = await productService.searchProducts(q, req.query);
     paginatedResponse(res, result.products, result.pagination);
+  }),
+
+  // API search nhanh cho dropdown header (tối đa 4 sản phẩm)
+  quickSearch: catchAsync(async (req, res) => {
+    const { q, limit = 4 } = req.query;
+    if (!q || q.trim().length < 2) {
+      return res.json({
+        success: true,
+        data: [],
+        total: 0
+      });
+    }
+
+    const result = await productService.quickSearchProducts(q, limit);
+    res.json({
+      success: true,
+      data: result.products,
+      total: result.total
+    });
   }),
 
   // Cập nhật số lượng tồn kho
@@ -136,44 +213,4 @@ export const productController = {
     successResponse(res, tags);
   }),
 
-  // ==================== FLASH SALE ENDPOINTS ====================
-  
-  // Lấy tất cả flash sale đang active
-  getFlashSales: catchAsync(async (req, res) => {
-    const result = await productService.getFlashSaleProducts(req.query);
-    paginatedResponse(res, result.products, result.pagination);
-  }),
-
-  // Lấy flash sale sắp tới
-  getUpcomingFlashSales: catchAsync(async (req, res) => {
-    const limit = req.query.limit || 10;
-    const products = await productService.getUpcomingFlashSales(limit);
-    successResponse(res, products);
-  }),
-
-  // Kiểm tra flash sale availability
-  checkFlashSaleAvailability: catchAsync(async (req, res) => {
-    const { productId } = req.params;
-    const { quantity = 1 } = req.query;
-    const result = await productService.checkFlashSaleAvailability(productId, parseInt(quantity));
-    successResponse(res, result);
-  }),
-
-  // Lấy thống kê flash sale
-  getFlashSaleStats: catchAsync(async (req, res) => {
-    const stats = await productService.getFlashSaleStats();
-    successResponse(res, stats);
-  }),
-
-  // ==================== QUICK SALE ENDPOINTS ====================
-  
-  // Lấy tất cả sản phẩm quick sale (cho homepage widget)
-  getQuickSales: catchAsync(async (req, res) => {
-    const result = await productService.getQuickSaleProducts(req.query);
-    successResponse(res, {
-      products: result.products,
-      total: result.total,
-      limit: result.limit
-    });
-  })
 };

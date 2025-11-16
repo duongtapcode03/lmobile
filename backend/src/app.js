@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+// import rateLimit from "express-rate-limit"; // Disabled - rate limiting is off
 import morgan from "morgan";
 import { connectDB } from "./config/db.js";
 import routes from "./routes/index.js";
@@ -36,6 +36,9 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Rate Limiting - General API
+// DISABLED - Rate limiting is disabled in all environments
+// Uncomment below to enable rate limiting
+/*
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -49,9 +52,16 @@ const limiter = rateLimit({
 
 // Apply rate limiting to all API routes
 app.use("/api", limiter);
+*/
+console.log('[Rate Limiting] Disabled in all environments');
 
-// Routes
-app.use("/api", routes);
+// API Versioning
+// Support both /api and /api/v1 for backward compatibility
+app.use("/api", routes); // Non-versioned routes (backward compatibility)
+app.use("/api/v1", routes); // Versioned routes
+
+// Debug: Log all registered routes
+console.log('[App] Routes registered. Admin routes should be at /api/v1/admin/*');
 
 // Health check endpoint
 app.get("/health", (req, res) => {

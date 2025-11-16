@@ -5,6 +5,7 @@ import { protect, authorize } from "../../core/middleware/auth.middleware.js";
 const router = express.Router();
 
 // Public routes (không cần xác thực)
+router.get("/list", blogController.getList); // API mới cho trang tin tức
 router.get("/", blogController.getAll);
 router.get("/featured", blogController.getFeatured);
 router.get("/pinned", blogController.getPinned);

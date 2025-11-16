@@ -1,65 +1,92 @@
 import mongoose from "mongoose";
 
+/**
+ * Category Model
+ * Danh mục sản phẩm
+ */
 const categorySchema = new mongoose.Schema(
   {
+    _id: {
+      type: Number,
+      required: true
+    },
     name: { 
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [100, "Tên danh mục không được quá 100 ký tự"],
+      index: true
+    },
+    slug: {
       type: String, 
       required: true, 
       unique: true,
       trim: true,
-      maxlength: [50, "Tên danh mục không được quá 50 ký tự"]
+      lowercase: true,
+      index: true
     },
     description: { 
       type: String, 
       trim: true,
       maxlength: [500, "Mô tả không được quá 500 ký tự"]
     },
-    slug: { 
-      type: String, 
-      unique: true,
-      lowercase: true,
-      trim: true
-    },
     image: { 
       type: String,
-      default: ""
+      trim: true
     },
     icon: { 
       type: String,
-      default: ""
+      trim: true
     },
     isActive: { 
       type: Boolean, 
-      default: true 
+      default: true,
+      index: true
     },
     sortOrder: { 
       type: Number, 
-      default: 0 
-    },
-    parentCategory: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "Category",
-      default: null
+      default: 0,
+      index: true
     },
     metaTitle: { 
       type: String,
       trim: true,
-      maxlength: [60, "Meta title không được quá 60 ký tự"]
+      maxlength: [200, "Meta title không được quá 200 ký tự"]
     },
     metaDescription: { 
       type: String,
       trim: true,
-      maxlength: [160, "Meta description không được quá 160 ký tự"]
+      maxlength: [500, "Meta description không được quá 500 ký tự"]
+    },
+    parentCategory: {
+      type: Number,
+      ref: "Category",
+      default: null,
+      index: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now
     }
   },
   { 
     timestamps: true,
+    _id: true, // Sử dụng _id là Number
     toJSON: { virtuals: true },
     toObject: { virtuals: true }
   }
 );
 
-// Virtual để lấy số lượng sản phẩm trong danh mục (many-to-many)
+// Indexes
+categorySchema.index({ isActive: 1, sortOrder: 1 });
+categorySchema.index({ slug: 1 }, { unique: true });
+categorySchema.index({ parentCategory: 1 });
+
+// Virtual: số lượng products
 categorySchema.virtual("productCount", {
   ref: "Product",
   localField: "_id",
@@ -67,30 +94,17 @@ categorySchema.virtual("productCount", {
   count: true
 });
 
-// Virtual để lấy danh sách sản phẩm con
+// Virtual: danh mục con
 categorySchema.virtual("subCategories", {
   ref: "Category",
   localField: "_id",
   foreignField: "parentCategory"
 });
 
-// Tự động tạo slug từ name
-categorySchema.pre("save", function(next) {
-  if (this.isModified("name") && !this.slug) {
-    this.slug = this.name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .trim("-");
-  }
+// Pre-save middleware
+categorySchema.pre("save", function (next) {
+  this.updatedAt = Date.now();
   next();
 });
-
-// Index để tối ưu tìm kiếm
-categorySchema.index({ name: "text", description: "text" });
-categorySchema.index({ slug: 1 });
-categorySchema.index({ isActive: 1 });
-categorySchema.index({ parentCategory: 1 });
 
 export const Category = mongoose.model("Category", categorySchema);

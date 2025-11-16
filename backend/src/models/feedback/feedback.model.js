@@ -8,7 +8,7 @@ const feedbackSchema = new mongoose.Schema(
       required: true
     },
     product: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Number,
       ref: "Product",
       required: true
     },
@@ -190,8 +190,14 @@ feedbackSchema.post("findOneAndDelete", async function() {
 feedbackSchema.statics.updateProductRating = async function(productId) {
   const { Product } = await import("../product/product.model.js");
   
+  // Convert productId to Number nếu là string
+  const productIdNum = typeof productId === 'string' ? parseInt(productId, 10) : productId;
+  if (isNaN(productIdNum)) {
+    return;
+  }
+  
   const stats = await this.aggregate([
-    { $match: { product: productId, status: "approved" } },
+    { $match: { product: productIdNum, status: "approved" } },
     {
       $group: {
         _id: null,
@@ -202,7 +208,7 @@ feedbackSchema.statics.updateProductRating = async function(productId) {
   ]);
 
   if (stats.length > 0) {
-    await Product.findByIdAndUpdate(productId, {
+    await Product.findByIdAndUpdate(productIdNum, {
       rating: Math.round(stats[0].averageRating * 10) / 10,
       reviewCount: stats[0].totalReviews
     });

@@ -35,6 +35,10 @@ router.get("/products/:productId/check",
   validate, 
   wishlistController.checkProduct
 );
+// API mới: Toggle wishlist (thêm nếu chưa có, xóa nếu đã có)
+router.post("/products/:productId/toggle", 
+  wishlistController.toggleProduct
+);
 
 // Public route - get wishlist by share token
 router.get("/share/:token", wishlistController.getWishlistByToken);

@@ -1,0 +1,86 @@
+.profile-page {
+  padding: 24px 0;
+  min-height: 60vh;
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+
+  .avatar-card {
+    text-align: center;
+
+    // Fix avatar bị méo
+    .ant-avatar {
+      width: 120px !important;
+      height: 120px !important;
+      border-radius: 50% !important;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+
+      img {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+        object-position: center;
+        border-radius: 50%;
+      }
+
+      .anticon {
+        font-size: 60px;
+      }
+    }
+
+    // Fix Upload component với picture-circle
+    .ant-upload {
+      display: block;
+      margin: 0 auto;
+    }
+
+    .ant-upload-select-picture-card,
+    .ant-upload-select {
+      width: 120px !important;
+      height: 120px !important;
+      border-radius: 50% !important;
+      overflow: hidden;
+      margin: 0 auto;
+      border: 2px solid #d9d9d9;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover {
+        border-color: #1890ff;
+      }
+
+      .ant-upload {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      // Đảm bảo Avatar bên trong không bị méo
+      .ant-avatar {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 50% !important;
+
+        img {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+        }
+      }
+    }
+  }
+}
+
+
+
