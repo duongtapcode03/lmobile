@@ -4,11 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Typography, Button, Tag } from 'antd';
+import { Typography, Button, Tag } from 'antd';
 import { RightOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import ProductCard from '../ProductCard';
-import flashSaleService, { type FlashSale, type FlashSaleItem } from '../../api/flashSaleService';
+import flashSaleService, { type FlashSaleItem } from '../../api/flashSaleService';
 import type { PhoneDetail } from '../../types';
 import './FlashSaleSection.scss';
 
@@ -41,7 +41,8 @@ const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
       const allItems: FlashSaleItem[] = [];
       for (const flashSale of flashSalesResponse.data || []) {
         try {
-          const itemsResponse = await flashSaleService.getFlashSaleItems(flashSale._id!, {
+          // Sử dụng public API để không cần đăng nhập
+          const itemsResponse = await flashSaleService.getPublicFlashSaleItems(flashSale._id!, {
             page: 1,
             limit: 100, // Lấy tất cả items
             sortBy: 'sort_order',
@@ -77,9 +78,16 @@ const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
             ? Math.round((item.sold / item.flash_stock) * 100) 
             : 0;
 
+          // Lấy flashSaleId từ item (có thể là flashSaleId hoặc flash_sale_id)
+          const flashSaleId = (item as any).flashSaleId || item.flash_sale_id;
+
           return {
             ...product,
-            _id: product._id.toString(),
+            _id: product._id, // Giữ nguyên number
+            // Đảm bảo các thuộc tính bắt buộc có mặt
+            sku: (product as any).sku || `FS-${product._id}` || '',
+            brandRef: (product as any).brandRef || 0,
+            availability: availableStock > 0 ? 1 : 0,
             priceNumber: item.flash_price,
             price: new Intl.NumberFormat('vi-VN', {
               style: 'currency',
@@ -96,7 +104,7 @@ const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
               ? Math.round(((product.priceNumber - item.flash_price) / product.priceNumber) * 100)
               : 0,
             flashSale: {
-              flashSaleId: item.flashSaleId,
+              flashSaleId: flashSaleId,
               itemId: item._id,
               flash_price: item.flash_price,
               flash_stock: item.flash_stock,
@@ -109,7 +117,7 @@ const FlashSaleSection: React.FC<FlashSaleSectionProps> = ({
             },
             stock: availableStock, // Sử dụng availableStock thay vì remaining
             isFlashSale: true,
-          } as PhoneDetail & { flashSale: any };
+          } as unknown as PhoneDetail & { flashSale: any };
         });
 
       setProducts(productsData);

@@ -17,43 +17,6 @@ const Footer: React.FC = () => {
 
   return (
     <footer className="footer">
-      {/* Newsletter section */}
-      <div className="newsletter-section">
-        <div className="container">
-          <div className="newsletter-content">
-            <div className="newsletter-text">
-              <Title level={3} className="newsletter-title">
-                ĐĂNG KÝ NHẬN TIN KHUYẾN MÃI
-              </Title>
-              <Text className="newsletter-subtitle">
-                Nhận ngay voucher 10%
-              </Text>
-              <Text className="newsletter-note">
-                Voucher sẽ được gửi sau 24h, chỉ áp dụng cho khách hàng mới
-              </Text>
-            </div>
-            <div className="newsletter-form">
-              <Input
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                prefix={<MailOutlined />}
-                size="large"
-                className="email-input"
-              />
-              <Button 
-                type="primary" 
-                size="large" 
-                onClick={handleSubscribe}
-                className="subscribe-btn"
-              >
-                ĐĂNG KÝ NGAY
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Main footer content */}
       <div className="footer-main">
         <div className="container">

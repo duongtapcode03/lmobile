@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { message } from 'antd';
 import { useSelector } from 'react-redux';
 import { userService } from '../../api/userService';
+import { useToast } from '../../contexts/ToastContext';
 import type { PhoneDetail } from '../../types';
 import type { RootState } from '../../store';
 import './ProductCard.scss';
@@ -20,6 +20,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   onAddToWishlist,
   skipWishlistCheck = false
 }) => {
+  const toast = useToast();
   const navigate = useNavigate();
   const [isFavorite, setIsFavorite] = useState(false);
   const [checkingWishlist, setCheckingWishlist] = useState(false);
@@ -145,8 +146,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
   const hasDiscount = product.hasDiscount || 
     (product.discount && 
-     (typeof product.discount === 'string' 
-       ? product.discount !== '0' && product.discount.trim() !== ''
+     (typeof product.discount === 'string'
+       ? product.discount !== '0' && (product.discount as string).trim() !== ''
        : product.discount !== 0));
 
   const getDiscountPercent = (): string | null => {
@@ -192,13 +193,26 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
     // Check authentication - use Redux state
     if (!checkAuth() || !token) {
-      message.warning('Vui lòng đăng nhập để thêm sản phẩm vào yêu thích');
-      navigate('/login', { state: { from: window.location.pathname } });
+      const currentPath = window.location.pathname;
+      // Hiển thị message nhưng không block navigation
+      toast.warning('Vui lòng đăng nhập để thêm sản phẩm vào yêu thích', 2);
+      
+      // Lưu path hiện tại vào sessionStorage để có thể redirect lại sau khi login
+      try {
+        sessionStorage.setItem('redirectAfterLogin', currentPath);
+      } catch (err) {
+        console.warn('Could not save redirect path:', err);
+      }
+      
+      // Sử dụng window.location.href để đảm bảo page reload đúng cách và tránh màn hình trắng
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 200);
       return;
     }
 
     if (!productId) {
-      message.error('Không tìm thấy sản phẩm');
+      toast.error('Không tìm thấy sản phẩm');
       return;
     }
 
@@ -218,7 +232,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
         // Rollback nếu productId không hợp lệ
         setIsFavorite(previousFavoriteState);
         setLoading(false);
-        message.error('Không tìm thấy ID sản phẩm');
+        toast.error('Không tìm thấy ID sản phẩm');
         return;
       }
       
@@ -242,9 +256,9 @@ const ProductCard: React.FC<ProductCardProps> = ({
       
       // Hiển thị message
       if (confirmedState) {
-        message.success('Đã thêm vào yêu thích');
+        toast.success('Đã thêm vào yêu thích');
       } else {
-        message.success('Đã xóa khỏi yêu thích');
+        toast.success('Đã xóa khỏi yêu thích');
       }
 
       // Dispatch custom event to notify other components (e.g., Header)
@@ -269,7 +283,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
       }
       
       const errorMessage = error.response?.data?.message || 'Không thể cập nhật yêu thích';
-      message.error(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Table, Tag, Spin, message, Select } from 'antd';
+import { Row, Col, Card, Statistic, Table, Tag, Spin, Select } from 'antd';
 import {
   ShoppingOutlined,
   ShoppingCartOutlined,
@@ -14,9 +14,11 @@ import {
 import { Column } from '@ant-design/charts';
 import sellerService from '../../../api/sellerService';
 import type { SellerDashboardStats } from '../../../api/sellerService';
+import { useToast } from '../../../contexts/ToastContext';
 import './Dashboard.scss';
 
 const Dashboard: React.FC = () => {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<SellerDashboardStats | null>(null);
   const [revenuePeriod, setRevenuePeriod] = useState<'day' | 'month'>('day');
@@ -30,7 +32,7 @@ const Dashboard: React.FC = () => {
         setDashboardStats(stats);
       } catch (error: any) {
         console.error('Error fetching dashboard stats:', error);
-        message.error(error.response?.data?.message || 'Không thể tải thống kê dashboard');
+        toast.error(error.response?.data?.message || 'Không thể tải thống kê dashboard');
       } finally {
         setLoading(false);
       }

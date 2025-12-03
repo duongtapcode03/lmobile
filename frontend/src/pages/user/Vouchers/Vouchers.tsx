@@ -28,6 +28,9 @@ import {
   StarFilled,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { useSelector } from 'react-redux';
+import { useLocation } from 'react-router-dom';
+import { useToast } from '../../../contexts/ToastContext';
 import voucherService, { type Voucher } from '../../../api/voucherService';
 import './Vouchers.scss';
 
@@ -35,6 +38,9 @@ const { TabPane } = Tabs;
 
 const Vouchers: React.FC = () => {
   const toast = useToast();
+  const location = useLocation();
+  const isAuthenticated = useSelector((state: any) => state?.auth?.isAuthenticated || false);
+  const token = useSelector((state: any) => state?.auth?.token);
   const [availableVouchers, setAvailableVouchers] = useState<Voucher[]>([]);
   const [savedVouchers, setSavedVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(false);
@@ -65,6 +71,42 @@ const Vouchers: React.FC = () => {
   };
 
   const handleSaveVoucher = async (voucherId: string) => {
+    // Kiểm tra đăng nhập (cả Redux state và token)
+    const hasToken = token || (() => {
+      try {
+        const persistAuth = localStorage.getItem('persist:auth');
+        if (persistAuth) {
+          const parsed = JSON.parse(persistAuth);
+          let storedToken = parsed.token;
+          if (storedToken && typeof storedToken === 'string') {
+            if (storedToken.startsWith('"') && storedToken.endsWith('"')) {
+              storedToken = JSON.parse(storedToken);
+            }
+            if (storedToken && storedToken !== 'null' && storedToken !== 'undefined') {
+              return true;
+            }
+          }
+        }
+      } catch (error) {
+        return false;
+      }
+      return false;
+    })();
+
+    if (!isAuthenticated || !hasToken) {
+      const currentPath = location.pathname;
+      toast.warning('Vui lòng đăng nhập để lưu voucher', 2);
+      try {
+        sessionStorage.setItem('redirectAfterLogin', currentPath);
+      } catch (err) {
+        console.warn('Could not save redirect path:', err);
+      }
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 200);
+      return;
+    }
+
     try {
       await voucherService.saveVoucher(voucherId);
       toast.success('Đã lưu voucher');

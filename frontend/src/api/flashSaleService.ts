@@ -109,7 +109,7 @@ const flashSaleService = {
   },
 
   /**
-   * Lấy danh sách items trong flash sale
+   * Lấy danh sách items trong flash sale (yêu cầu auth - dùng cho admin/user đã đăng nhập)
    */
   getFlashSaleItems: async (
     flashSaleId: string,
@@ -122,6 +122,26 @@ const flashSaleService = {
     }
   ): Promise<{ data: FlashSaleItem[]; pagination?: any }> => {
     const response = await authApi.get(`/flash-sales/${flashSaleId}/items`, { params });
+    return {
+      data: response.data.data || [],
+      pagination: response.data.pagination
+    };
+  },
+
+  /**
+   * Lấy danh sách items trong flash sale (Public - không cần auth)
+   */
+  getPublicFlashSaleItems: async (
+    flashSaleId: string,
+    params?: {
+      page?: number;
+      limit?: number;
+      availableOnly?: boolean;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+    }
+  ): Promise<{ data: FlashSaleItem[]; pagination?: any }> => {
+    const response = await axiosClient.get(`/flash-sales/${flashSaleId}/items`, { params });
     return {
       data: response.data.data || [],
       pagination: response.data.pagination

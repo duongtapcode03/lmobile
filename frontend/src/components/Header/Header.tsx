@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SearchOutlined, ShoppingCartOutlined, UserOutlined, MenuOutlined, LogoutOutlined, HeartOutlined, FileTextOutlined } from '@ant-design/icons';
-import { Input, Button, Badge, Dropdown, Avatar, message, Spin } from 'antd';
+import { Input, Button, Badge, Dropdown, Avatar, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { authService } from '../../api/authService';
 import { userService } from '../../api/userService';
 import phoneService from '../../api/phoneService';
 import { persistor } from '../../store';
+import { useToast } from '../../contexts/ToastContext';
 import LanguageSwitcher from '../LanguageSwitcher';
 import './Header.scss';
 
@@ -18,6 +19,7 @@ const Header: React.FC = () => {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchValue, setSearchValue] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -253,7 +255,7 @@ const Header: React.FC = () => {
           localStorage.removeItem('persist:auth');
         }
         
-        message.success('Đăng xuất thành công!');
+        toast.success('Đăng xuất thành công!');
         navigate('/');
       }
     }
@@ -390,13 +392,33 @@ const Header: React.FC = () => {
 
               {/* Cart */}
               <div className="cart">
-                <Link to="/cart">
-                  <Badge count={cartTotalItems} showZero={false}>
-                    <Button type="text" icon={<ShoppingCartOutlined />} size="large">
-                      {t('common.cart')}
-                    </Button>
-                  </Badge>
-                </Link>
+                <Badge count={cartTotalItems} showZero={false}>
+                  <Button 
+                    type="text" 
+                    icon={<ShoppingCartOutlined />} 
+                    size="large"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      // Kiểm tra đăng nhập trước khi vào giỏ hàng
+                      if (!isAuthenticated || !token) {
+                        const currentPath = window.location.pathname;
+                        toast.warning('Vui lòng đăng nhập để xem giỏ hàng', 2);
+                        try {
+                          sessionStorage.setItem('redirectAfterLogin', currentPath);
+                        } catch (err) {
+                          console.warn('Could not save redirect path:', err);
+                        }
+                        setTimeout(() => {
+                          window.location.href = '/login';
+                        }, 200);
+                        return;
+                      }
+                      navigate('/cart');
+                    }}
+                  >
+                    {t('common.cart')}
+                  </Button>
+                </Badge>
               </div>
 
               {/* User menu */}

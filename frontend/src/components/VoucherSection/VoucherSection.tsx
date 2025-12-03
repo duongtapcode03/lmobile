@@ -7,7 +7,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Button,
   Typography,
-  message,
   Spin,
   Tooltip,
 } from 'antd';
@@ -17,6 +16,8 @@ import {
 } from '@ant-design/icons';
 import voucherService, { type Voucher } from '../../api/voucherService';
 import { useSelector } from 'react-redux';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useToast } from '../../contexts/ToastContext';
 import './VoucherSection.scss';
 
 const { Text } = Typography;
@@ -26,11 +27,15 @@ interface VoucherSectionProps {
 }
 
 const VoucherSection: React.FC<VoucherSectionProps> = ({ limit = 6 }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const toast = useToast();
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [savedVouchers, setSavedVouchers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const isAuthenticated = useSelector((state: any) => state?.auth?.isAuthenticated || false);
+  const token = useSelector((state: any) => state?.auth?.token);
 
   useEffect(() => {
     loadVouchers();
@@ -64,8 +69,39 @@ const VoucherSection: React.FC<VoucherSectionProps> = ({ limit = 6 }) => {
   };
 
   const handleSaveVoucher = async (voucherId: string) => {
-    if (!isAuthenticated) {
-      message.warning('Vui lòng đăng nhập để lưu voucher');
+    // Kiểm tra đăng nhập (cả Redux state và token)
+    const hasToken = token || (() => {
+      try {
+        const persistAuth = localStorage.getItem('persist:auth');
+        if (persistAuth) {
+          const parsed = JSON.parse(persistAuth);
+          let storedToken = parsed.token;
+          if (storedToken && typeof storedToken === 'string') {
+            if (storedToken.startsWith('"') && storedToken.endsWith('"')) {
+              storedToken = JSON.parse(storedToken);
+            }
+            if (storedToken && storedToken !== 'null' && storedToken !== 'undefined') {
+              return true;
+            }
+          }
+        }
+      } catch (error) {
+        return false;
+      }
+      return false;
+    })();
+
+    if (!isAuthenticated || !hasToken) {
+      const currentPath = location.pathname;
+      toast.warning('Vui lòng đăng nhập để lưu voucher', 2);
+      try {
+        sessionStorage.setItem('redirectAfterLogin', currentPath);
+      } catch (err) {
+        console.warn('Could not save redirect path:', err);
+      }
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 200);
       return;
     }
 
@@ -74,15 +110,15 @@ const VoucherSection: React.FC<VoucherSectionProps> = ({ limit = 6 }) => {
       if (savedVouchers.includes(voucherId)) {
         await voucherService.removeSavedVoucher(voucherId);
         setSavedVouchers(prev => prev.filter(id => id !== voucherId));
-        message.success('Đã bỏ lưu voucher');
+        toast.success('Đã bỏ lưu voucher');
       } else {
         await voucherService.saveVoucher(voucherId);
         setSavedVouchers(prev => [...prev, voucherId]);
-        message.success('Đã lưu voucher');
+        toast.success('Đã lưu voucher');
       }
     } catch (error: any) {
       console.error('Failed to save voucher:', error);
-      message.error(error.response?.data?.message || 'Không thể lưu voucher');
+      toast.error(error.response?.data?.message || 'Không thể lưu voucher');
     } finally {
       setSaving(null);
     }

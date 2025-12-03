@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Layout, Menu, Avatar, Dropdown, message } from 'antd';
+import { Layout, Menu, Avatar, Dropdown } from 'antd';
 import {
   DashboardOutlined,
   ShoppingOutlined,
@@ -24,6 +24,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { persistor } from '../../store';
 import { logout } from '../../features/auth/authSlice';
 import { authService } from '../../api/authService';
+import { useToast } from '../../contexts/ToastContext';
 import type { RootState } from '../../store';
 import './AdminLayout.scss';
 
@@ -38,6 +39,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useDispatch();
+  const toast = useToast();
   
   const user = useSelector((state: RootState) => state.auth.user);
 
@@ -123,7 +125,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
         console.error('Failed to purge Redux Persist:', purgeError);
         localStorage.removeItem('persist:auth');
       }
-      message.success('Đăng xuất thành công!');
+      toast.success('Đăng xuất thành công!');
       navigate('/login');
     }
   }

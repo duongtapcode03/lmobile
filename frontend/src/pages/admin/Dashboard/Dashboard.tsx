@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Table, Tag, Spin, message, Select, Space, DatePicker } from 'antd';
+import { Row, Col, Card, Statistic, Table, Tag, Spin, Select, Space, DatePicker } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import {
@@ -21,11 +21,13 @@ import {
 import { Column, Line } from '@ant-design/charts';
 import adminService from '../../../api/adminService';
 import type { DashboardStats } from '../../../api/adminService';
+import { useToast } from '../../../contexts/ToastContext';
 import './Dashboard.scss';
 
 const { RangePicker } = DatePicker;
 
 const Dashboard: React.FC = () => {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [revenuePeriod, setRevenuePeriod] = useState<'day' | 'week' | 'month'>('day');
@@ -51,7 +53,7 @@ const Dashboard: React.FC = () => {
         setDashboardStats(stats);
       } catch (error: any) {
         console.error('Error fetching dashboard stats:', error);
-        message.error(error.response?.data?.message || 'Không thể tải thống kê dashboard');
+        toast.error(error.response?.data?.message || 'Không thể tải thống kê dashboard');
       } finally {
         setLoading(false);
       }

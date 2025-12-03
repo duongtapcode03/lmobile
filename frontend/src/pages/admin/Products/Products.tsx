@@ -11,7 +11,6 @@ import {
   Space,
   Modal,
   Form,
-  message,
   Popconfirm,
   Tag,
   Image,
@@ -35,12 +34,14 @@ import categoryService from '../../../api/categoryService';
 import type { PhoneDetail, PhoneListResponse } from '../../../types';
 import type { Brand } from '../../../types';
 import type { Category } from '../../../api/categoryService';
+import { useToast } from '../../../contexts/ToastContext';
 import './Products.scss';
 
 const { Search } = Input;
 const { Option } = Select;
 
 const Products: React.FC = () => {
+  const toast = useToast();
   const [products, setProducts] = useState<PhoneDetail[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -97,7 +98,7 @@ const Products: React.FC = () => {
       setTotal(response.total || 0);
     } catch (error: any) {
       console.error('Failed to load products:', error);
-      message.error('Không thể tải danh sách sản phẩm');
+        toast.error('Không thể tải danh sách sản phẩm');
     } finally {
       setLoading(false);
     }
@@ -183,11 +184,11 @@ const Products: React.FC = () => {
   const handleDelete = async (id: number | string) => {
     try {
       await phoneService.deleteProduct(id);
-      message.success('Xóa sản phẩm thành công');
+        toast.success('Xóa sản phẩm thành công');
       loadProducts();
     } catch (error: any) {
       console.error('Failed to delete product:', error);
-      message.error(error.response?.data?.message || 'Không thể xóa sản phẩm');
+        toast.error(error.response?.data?.message || 'Không thể xóa sản phẩm');
     }
   };
 
@@ -256,11 +257,11 @@ const Products: React.FC = () => {
 
       if (editingProduct && editingProduct._id) {
         await phoneService.updateProduct(editingProduct._id, productData);
-        message.success('Cập nhật sản phẩm thành công');
+        toast.success('Cập nhật sản phẩm thành công');
       } else {
         // Backend sẽ tự động generate _id nếu không có
         await phoneService.createProduct(productData);
-        message.success('Tạo sản phẩm thành công');
+        toast.success('Tạo sản phẩm thành công');
       }
       setIsModalVisible(false);
       form.resetFields();
@@ -273,9 +274,9 @@ const Products: React.FC = () => {
       // Show detailed validation errors
       if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
         const errorMessages = error.response.data.errors.map((err: any) => err.msg || err.message).join(', ');
-        message.error(`Lỗi validation: ${errorMessages}`);
+        toast.error(`Lỗi validation: ${errorMessages}`);
       } else {
-        message.error(error.response?.data?.message || 'Không thể lưu sản phẩm');
+        toast.error(error.response?.data?.message || 'Không thể lưu sản phẩm');
       }
     }
   };

@@ -4,9 +4,10 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Layout, Input, Button, Avatar, Badge, Spin, Empty, message, Typography } from 'antd';
+import { Layout, Input, Button, Avatar, Badge, Spin, Empty, Typography } from 'antd';
 import { SendOutlined, UserOutlined, SearchOutlined } from '@ant-design/icons';
 import { useChat } from '../../../contexts/ChatContext';
+import { useToast } from '../../../contexts/ToastContext';
 import type { ChatConversation, ChatMessage } from '../../../api/chatService';
 import './Support.scss';
 
@@ -135,7 +136,7 @@ const SellerSupport: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error selecting conversation:', error);
-      message.error('Không thể mở cuộc trò chuyện');
+      toast.error('Không thể mở cuộc trò chuyện');
       setSelectedConversation(null);
     }
   };
@@ -160,14 +161,14 @@ const SellerSupport: React.FC = () => {
         }
       } catch (error: any) {
         console.error('Error joining conversation:', error);
-        message.error('Không thể kết nối đến cuộc trò chuyện. Vui lòng thử lại.');
+        toast.error('Không thể kết nối đến cuộc trò chuyện. Vui lòng thử lại.');
         return;
       }
     }
 
     // Kiểm tra lại sau khi join
     if (!currentConversation || currentConversation._id !== selectedConversation._id) {
-      message.error('Vui lòng đợi cuộc trò chuyện được tải...');
+      toast.error('Vui lòng đợi cuộc trò chuyện được tải...');
       return;
     }
 
@@ -179,7 +180,7 @@ const SellerSupport: React.FC = () => {
       await loadConversations();
     } catch (error: any) {
       console.error('Error sending message:', error);
-      message.error(error.message || 'Không thể gửi tin nhắn');
+      toast.error(error.message || 'Không thể gửi tin nhắn');
     }
   };
 

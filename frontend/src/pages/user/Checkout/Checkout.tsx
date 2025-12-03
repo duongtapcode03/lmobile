@@ -1051,12 +1051,6 @@ const CheckoutPage: React.FC = () => {
                         <Radio value="vnpay">
                           <Text strong>VNPay (QR Code / Thẻ ATM)</Text>
                         </Radio>
-                        <Radio value="zalopay">
-                          <Text strong>Ví điện tử ZaloPay</Text>
-                        </Radio>
-                        <Radio value="credit_card">
-                          <Text strong>Thẻ tín dụng/Ghi nợ</Text>
-                        </Radio>
                       </Space>
                     </Radio.Group>
                   </Form.Item>
@@ -1181,9 +1175,6 @@ const CheckoutPage: React.FC = () => {
                       rows={3}
                       placeholder="Ghi chú cho đơn hàng (tùy chọn)"
                     />
-                  </Form.Item>
-                  <Form.Item name="isGift" valuePropName="checked">
-                    <Checkbox>Đây là đơn hàng quà tặng</Checkbox>
                   </Form.Item>
                   <Form.Item
                     noStyle

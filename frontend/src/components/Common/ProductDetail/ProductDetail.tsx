@@ -65,6 +65,29 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
   
   // Get auth state from Redux
   const isAuthenticated = useSelector((state: any) => state?.auth?.isAuthenticated || false);
+  const token = useSelector((state: any) => state?.auth?.token);
+  
+  // Helper function để kiểm tra token trong localStorage
+  const checkTokenInStorage = (): boolean => {
+    try {
+      const persistAuth = localStorage.getItem('persist:auth');
+      if (persistAuth) {
+        const parsed = JSON.parse(persistAuth);
+        let storedToken = parsed.token;
+        if (storedToken && typeof storedToken === 'string') {
+          if (storedToken.startsWith('"') && storedToken.endsWith('"')) {
+            storedToken = JSON.parse(storedToken);
+          }
+          if (storedToken && storedToken !== 'null' && storedToken !== 'undefined') {
+            return true;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Error checking token in storage:', error);
+    }
+    return false;
+  };
 
   useEffect(() => {
     const loadProduct = async () => {
@@ -342,11 +365,20 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
       stock: product.stock
     });
 
-    // Kiểm tra đăng nhập - BẮT BUỘC
-    if (!isAuthenticated) {
+    // Kiểm tra đăng nhập - BẮT BUỘC (kiểm tra cả Redux state và token trong localStorage)
+    const hasToken = token || checkTokenInStorage();
+    if (!isAuthenticated || !hasToken) {
       console.log('[BuyNow] Not authenticated, redirecting to login');
-      toast.warning('Vui lòng đăng nhập để mua hàng');
-      navigate('/login', { state: { from: `/product/${product.slug || product._id}` } });
+      const currentPath = `/product/${product.slug || product._id}`;
+      toast.warning('Vui lòng đăng nhập để mua hàng', 2);
+      try {
+        sessionStorage.setItem('redirectAfterLogin', currentPath);
+      } catch (err) {
+        console.warn('Could not save redirect path:', err);
+      }
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 200);
       return;
     }
 
@@ -618,11 +650,20 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
       stock: product.stock
     });
 
-    // Kiểm tra đăng nhập - BẮT BUỘC
-    if (!isAuthenticated) {
+    // Kiểm tra đăng nhập - BẮT BUỘC (kiểm tra cả Redux state và token trong localStorage)
+    const hasToken = token || checkTokenInStorage();
+    if (!isAuthenticated || !hasToken) {
       console.log('[AddToCart] Not authenticated, redirecting to login');
-      toast.warning('Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng');
-      navigate('/login', { state: { from: `/product/${product.slug || product._id}` } });
+      const currentPath = `/product/${product.slug || product._id}`;
+      toast.warning('Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng', 2);
+      try {
+        sessionStorage.setItem('redirectAfterLogin', currentPath);
+      } catch (err) {
+        console.warn('Could not save redirect path:', err);
+      }
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 200);
       return;
     }
 
@@ -882,6 +923,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
                       ref={carouselRef}
                       dots={false}
                       infinite={true}
+                      autoplay={true}
+                      autoplaySpeed={3000}
                       afterChange={() => {}}
                       className="product-image-carousel"
                     >
@@ -1296,7 +1339,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
                       addingToCart || 
                       (product.stock === 0) || 
                       quantity < 1 ||
-                      !isAuthenticated ||
                       (product.versions && product.versions.length > 0 && !selectedVersion) ||
                       (product.colors && product.colors.length > 0 && !selectedColor)
                     }
@@ -1317,7 +1359,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
                       (product.stock === 0) || 
                       (product.availability === 0) || 
                       quantity < 1 ||
-                      !isAuthenticated ||
                       (product.versions && product.versions.length > 0 && !selectedVersion) ||
                       (product.colors && product.colors.length > 0 && !selectedColor)
                     }

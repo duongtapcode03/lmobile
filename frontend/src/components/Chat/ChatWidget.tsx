@@ -4,28 +4,27 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Button, Input, Avatar, Badge, Spin, message } from 'antd';
+import { Button, Input, Avatar, Badge, Spin } from 'antd';
 import { MessageOutlined, CloseOutlined, SendOutlined, UserOutlined } from '@ant-design/icons';
 import { useSelector } from 'react-redux';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useChat } from '../../contexts/ChatContext';
+import { useToast } from '../../contexts/ToastContext';
 import './ChatWidget.scss';
 
 const ChatWidget: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const toast = useToast();
   const userRole = useSelector((state: any) => state?.auth?.user?.role);
+  const isAuthenticated = useSelector((state: any) => state?.auth?.isAuthenticated || false);
   
-  // Chỉ hiển thị ChatWidget cho user, không hiển thị cho admin/seller
-  const isAdminOrSeller = userRole === 'admin' || userRole === 'seller';
-  const isAdminOrSellerRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/seller');
-  
-  if (isAdminOrSeller || isAdminOrSellerRoute) {
-    return null;
-  }
+  // Tất cả hooks phải được gọi trước khi có early return
   const [isOpen, setIsOpen] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const hasJoinedRef = useRef(false);
 
   const {
     isConnected,
@@ -50,19 +49,17 @@ const ChatWidget: React.FC = () => {
     }
   }, [messages]);
 
-  const hasJoinedRef = useRef(false);
-
-  // Load conversations on mount
+  // Load conversations on mount (chỉ khi đã đăng nhập)
   useEffect(() => {
-    if (isOpen && isConnected) {
+    if (isOpen && isConnected && isAuthenticated) {
       loadConversations();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isConnected]);
+  }, [isOpen, isConnected, isAuthenticated]);
 
-  // Join or create conversation when opening (only once)
+  // Join or create conversation when opening (only once, chỉ khi đã đăng nhập)
   useEffect(() => {
-    if (isOpen && isConnected && !hasJoinedRef.current) {
+    if (isOpen && isConnected && isAuthenticated && !hasJoinedRef.current) {
       if (conversations.length > 0) {
         // Join existing conversation
         const latestConversation = conversations[0];
@@ -86,9 +83,39 @@ const ChatWidget: React.FC = () => {
       hasJoinedRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isConnected, conversations.length]);
+  }, [isOpen, isConnected, isAuthenticated, conversations.length]);
+
+  // Chỉ hiển thị ChatWidget cho user, không hiển thị cho admin/seller
+  const isAdminOrSeller = userRole === 'admin' || userRole === 'seller';
+  const isAdminOrSellerRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/seller');
+  
+  // Không hiển thị chat ở trang đăng nhập và đăng ký
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
+  
+  // Không render nếu là admin/seller hoặc trang auth (sau khi đã gọi TẤT CẢ hooks)
+  if (isAdminOrSeller || isAdminOrSellerRoute || isAuthPage) {
+    return null;
+  }
 
   const handleOpen = () => {
+    // Kiểm tra đăng nhập trước khi mở chat
+    if (!isAuthenticated) {
+      const currentPath = location.pathname;
+      toast.warning('Vui lòng đăng nhập để sử dụng tính năng chat', 2);
+      
+      // Lưu path hiện tại vào sessionStorage
+      try {
+        sessionStorage.setItem('redirectAfterLogin', currentPath);
+      } catch (err) {
+        console.warn('Could not save redirect path:', err);
+      }
+      
+      // Sử dụng window.location.href để đảm bảo page reload đúng cách
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 200);
+      return;
+    }
     setIsOpen(true);
   };
 
@@ -106,7 +133,7 @@ const ChatWidget: React.FC = () => {
       setInputMessage('');
       stopTyping();
     } catch (error: any) {
-      message.error(error.message || 'Không thể gửi tin nhắn');
+      toast.error(error.message || 'Không thể gửi tin nhắn');
     }
   };
 
@@ -126,15 +153,14 @@ const ChatWidget: React.FC = () => {
     }
   };
 
-  // Count unread messages
-  const unreadCount = conversations.reduce((total, conv) => {
-    return total + (conv.unreadCount?.user || 0);
-  }, 0);
+  // Count unread messages (chỉ đếm khi đã đăng nhập)
+  const unreadCount = isAuthenticated 
+    ? conversations.reduce((total, conv) => {
+        return total + (conv.unreadCount?.user || 0);
+      }, 0)
+    : 0;
 
-  if (!isConnected) {
-    return null; // Don't show widget if not connected
-  }
-
+  // Widget luôn hiển thị, nhưng chỉ cho phép mở chat khi đã đăng nhập
   return (
     <div className="chat-widget">
       {!isOpen ? (
@@ -146,10 +172,51 @@ const ChatWidget: React.FC = () => {
           onClick={handleOpen}
           className="chat-widget-toggle"
         >
-          {unreadCount > 0 && (
+          {isAuthenticated && unreadCount > 0 && (
             <Badge count={unreadCount} offset={[-5, 5]} />
           )}
         </Button>
+      ) : !isAuthenticated ? (
+        // Hiển thị thông báo yêu cầu đăng nhập nếu widget đã mở nhưng chưa đăng nhập
+        <div className="chat-widget-container" ref={chatContainerRef}>
+          <div className="chat-widget-header">
+            <div className="chat-widget-header-info">
+              <Avatar icon={<UserOutlined />} />
+              <div>
+                <div className="chat-widget-header-title">Hỗ trợ khách hàng</div>
+                <div className="chat-widget-header-status">Yêu cầu đăng nhập</div>
+              </div>
+            </div>
+            <Button
+              type="text"
+              icon={<CloseOutlined />}
+              onClick={handleClose}
+              className="chat-widget-close"
+            />
+          </div>
+          <div className="chat-widget-messages">
+            <div className="chat-widget-empty">
+              <p>Vui lòng đăng nhập để sử dụng tính năng chat</p>
+              <Button
+                type="primary"
+                onClick={() => {
+                  const currentPath = location.pathname;
+                  try {
+                    sessionStorage.setItem('redirectAfterLogin', currentPath);
+                  } catch (err) {
+                    console.warn('Could not save redirect path:', err);
+                  }
+                  setTimeout(() => {
+                    window.location.href = '/login';
+                  }, 200);
+                }}
+                style={{ marginTop: 16 }}
+              >
+                Đăng nhập ngay
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="chat-widget-container" ref={chatContainerRef}>
           <div className="chat-widget-header">
@@ -235,13 +302,13 @@ const ChatWidget: React.FC = () => {
               onKeyPress={handleKeyPress}
               placeholder="Nhập tin nhắn..."
               autoSize={{ minRows: 1, maxRows: 4 }}
-              disabled={!isConnected}
+              disabled={!isConnected || !isAuthenticated}
             />
             <Button
               type="primary"
               icon={<SendOutlined />}
               onClick={handleSend}
-              disabled={!inputMessage.trim() || !isConnected}
+              disabled={!inputMessage.trim() || !isConnected || !isAuthenticated}
               className="chat-widget-send"
             >
               Gửi
