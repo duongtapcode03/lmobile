@@ -28,7 +28,9 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import orderService, { type Order } from '../../../api/orderService';
 import feedbackService, { type Feedback } from '../../../api/feedbackService';
+import returnRequestService, { type ReturnRequest } from '../../../api/returnRequestService';
 import ReviewModal from '../../../components/Common/ReviewModal/ReviewModal';
+import ReturnRequestModal from '../../../components/Common/ReturnRequestModal/ReturnRequestModal';
 import { PageWrapper } from '../../../components';
 import './OrderDetail.scss';
 
@@ -48,6 +50,9 @@ const OrderDetailPage: React.FC = () => {
     orderNumber: string;
   } | null>(null);
   const [existingFeedbacks, setExistingFeedbacks] = useState<Map<string, Feedback>>(new Map());
+  const [returnRequestModalVisible, setReturnRequestModalVisible] = useState(false);
+  const [returnRequest, setReturnRequest] = useState<ReturnRequest | null>(null);
+  const [loadingReturnRequest, setLoadingReturnRequest] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -58,8 +63,33 @@ const OrderDetailPage: React.FC = () => {
   useEffect(() => {
     if (order && order.status === 'delivered') {
       loadFeedbacksForOrder();
+      loadReturnRequest();
     }
   }, [order]);
+
+  const loadReturnRequest = async () => {
+    if (!order) return;
+    
+    try {
+      // Kiểm tra xem đã có return request chưa
+      const requests = await returnRequestService.getMyReturnRequests({
+        page: 1,
+        limit: 10
+      });
+      
+      const existingRequest = requests.data.find(
+        req => typeof req.order === 'object' 
+          ? req.order._id === order._id 
+          : req.order === order._id
+      );
+      
+      if (existingRequest) {
+        setReturnRequest(existingRequest);
+      }
+    } catch (error) {
+      console.error('Error loading return request:', error);
+    }
+  };
 
   const loadOrderDetail = async (orderId: string) => {
     try {
@@ -178,6 +208,30 @@ const OrderDetailPage: React.FC = () => {
       same_day: 'Giao trong ngày'
     };
     return texts[method] || method;
+  };
+
+  const getReturnRequestStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      pending: 'orange',
+      approved: 'blue',
+      rejected: 'red',
+      processing: 'cyan',
+      completed: 'green',
+      cancelled: 'default'
+    };
+    return colors[status] || 'default';
+  };
+
+  const getReturnRequestStatusText = (status: string) => {
+    const texts: Record<string, string> = {
+      pending: 'Chờ xử lý hoàn hàng',
+      approved: 'Đã duyệt hoàn hàng',
+      rejected: 'Từ chối hoàn hàng',
+      processing: 'Đang xử lý hoàn tiền',
+      completed: 'Đã hoàn thành',
+      cancelled: 'Đã hủy'
+    };
+    return texts[status] || status;
   };
 
   const formatPrice = (price: number) => {
@@ -328,6 +382,16 @@ const OrderDetailPage: React.FC = () => {
                   <Button danger onClick={handleCancelOrder}>
                     Hủy đơn hàng
                   </Button>
+                )}
+                {order.status === 'delivered' && !returnRequest && (
+                  <Button type="primary" onClick={() => setReturnRequestModalVisible(true)}>
+                    Yêu cầu hoàn hàng
+                  </Button>
+                )}
+                {returnRequest && (
+                  <Tag color={getReturnRequestStatusColor(returnRequest.status)}>
+                    {getReturnRequestStatusText(returnRequest.status)}
+                  </Tag>
                 )}
               </Space>
             }
@@ -551,6 +615,22 @@ const OrderDetailPage: React.FC = () => {
               ? existingFeedbacks.get(String(selectedProduct.productId)) || null
               : null
           }
+        />
+      )}
+
+      {/* Return Request Modal */}
+      {order && order.status === 'delivered' && (
+        <ReturnRequestModal
+          open={returnRequestModalVisible}
+          onCancel={() => {
+            setReturnRequestModalVisible(false);
+          }}
+          onSuccess={() => {
+            loadReturnRequest();
+            loadOrderDetail(order._id);
+            setReturnRequestModalVisible(false);
+          }}
+          order={order}
         />
       )}
     </PageWrapper>

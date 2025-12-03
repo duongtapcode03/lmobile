@@ -42,6 +42,19 @@
       .logo {
         flex-shrink: 0;
         text-decoration: none;
+        display: flex;
+        align-items: center;
+        
+        .logo-image {
+          height: 50px;
+          width: auto;
+          object-fit: contain;
+          transition: transform 0.3s;
+          
+          &:hover {
+            transform: scale(1.05);
+          }
+        }
         
         h1 {
           margin: 0;
@@ -383,6 +396,12 @@
         flex-direction: column;
         gap: 15px;
         justify-content: flex-start;
+
+        .logo {
+          .logo-image {
+            height: 40px;
+          }
+        }
 
         .search-container {
           width: 100%;

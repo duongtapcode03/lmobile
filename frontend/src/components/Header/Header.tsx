@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { SearchOutlined, ShoppingCartOutlined, UserOutlined, MenuOutlined, LogoutOutlined, SettingOutlined, HeartOutlined, FileTextOutlined } from '@ant-design/icons';
+import { SearchOutlined, ShoppingCartOutlined, UserOutlined, MenuOutlined, LogoutOutlined, HeartOutlined, FileTextOutlined } from '@ant-design/icons';
 import { Input, Button, Badge, Dropdown, Avatar, message, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
@@ -230,8 +230,6 @@ const Header: React.FC = () => {
       navigate('/profile');
     } else if (e.key === 'orders') {
       navigate('/orders');
-    } else if (e.key === 'settings') {
-      navigate('/settings');
     } else if (e.key === 'logout') {
       try {
         // Call logout API
@@ -283,11 +281,6 @@ const Header: React.FC = () => {
       label: t('common.orders'),
       icon: <FileTextOutlined />,
     },
-    {
-      key: 'settings',
-      label: 'Cài đặt',
-      icon: <SettingOutlined />,
-    },
     { type: 'divider' },
     {
       key: 'logout',
@@ -315,7 +308,7 @@ const Header: React.FC = () => {
           <div className="header-content">
             {/* Logo */}
             <Link to="/" className="logo">
-              <h1>LMobile</h1>
+              <img src="/logo.jpg" alt="LMobile" className="logo-image" />
             </Link>
 
             {/* Search bar */}

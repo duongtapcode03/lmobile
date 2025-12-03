@@ -63,12 +63,19 @@ const Banners: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (!id || typeof id !== 'string') {
+      message.error('ID banner không hợp lệ');
+      return;
+    }
+    
     try {
-      await bannerService.deleteBanner(id);
+      await bannerService.deleteBanner(id.trim());
       message.success('Xóa banner thành công');
       loadBanners();
     } catch (error: any) {
-      message.error('Không thể xóa banner');
+      const errorMessage = error?.response?.data?.message || error?.message || 'Không thể xóa banner';
+      message.error(errorMessage);
+      console.error('Delete banner error:', error);
     }
   };
 
@@ -76,7 +83,11 @@ const Banners: React.FC = () => {
     try {
       const values = await form.validateFields();
       if (editingBanner) {
-        await bannerService.updateBanner(editingBanner._id!, values);
+        if (!editingBanner._id) {
+          message.error('ID banner không hợp lệ');
+          return;
+        }
+        await bannerService.updateBanner(editingBanner._id.trim(), values);
         message.success('Cập nhật banner thành công');
       } else {
         await bannerService.createBanner(values);
@@ -85,6 +96,8 @@ const Banners: React.FC = () => {
       setIsModalVisible(false);
       loadBanners();
     } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Có lỗi xảy ra';
+      message.error(errorMessage);
       console.error('Form validation failed:', error);
     }
   };
@@ -150,7 +163,13 @@ const Banners: React.FC = () => {
           />
           <Popconfirm
             title="Bạn có chắc chắn muốn xóa banner này?"
-            onConfirm={() => handleDelete(record._id!)}
+            onConfirm={() => {
+              if (record._id) {
+                handleDelete(record._id);
+              } else {
+                message.error('ID banner không hợp lệ');
+              }
+            }}
             okText="Xóa"
             cancelText="Hủy"
             okButtonProps={{ danger: true }}

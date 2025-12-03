@@ -32,13 +32,16 @@ import CheckoutPage from '../pages/user/Checkout/Checkout';
 import ProfilePage from '../pages/user/Profile/Profile';
 import PaymentSuccessPage from '../pages/user/PaymentSuccess/PaymentSuccess';
 import PaymentFailedPage from '../pages/user/PaymentFailed/PaymentFailed';
+import VnpayReturnPage from '../pages/user/Payment/VnpayReturn';
 import FlashSalesPage from '../pages/user/FlashSales/FlashSales';
+import UserVouchersPage from '../pages/user/Vouchers/Vouchers';
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard/Dashboard';
 import AdminProducts from '../pages/admin/Products/Products';
 import AdminCategories from '../pages/admin/Categories/Categories';
 import AdminOrders from '../pages/admin/Orders/Orders';
+import AdminReturnRequests from '../pages/admin/ReturnRequests/ReturnRequests';
 import AdminUsers from '../pages/admin/Users/Users';
 import AdminBanners from '../pages/admin/Banners/Banners';
 import AdminBrands from '../pages/admin/Brands/Brands';
@@ -46,6 +49,7 @@ import AdminBlogs from '../pages/admin/Blogs/Blogs';
 import AdminVouchers from '../pages/admin/Vouchers/Vouchers';
 import AdminReviews from '../pages/admin/Reviews/Reviews';
 import AdminFlashSales from '../pages/admin/FlashSales/FlashSales';
+import AdminSupport from '../pages/admin/Support/Support';
 
 // Seller Pages
 import SellerDashboard from '../pages/seller/Dashboard/Dashboard';
@@ -53,6 +57,9 @@ import SellerProducts from '../pages/seller/Products/Products';
 import SellerOrders from '../pages/seller/Orders/Orders';
 import SellerCategories from '../pages/seller/Categories/Categories';
 import SellerBlogs from '../pages/seller/Blogs/Blogs';
+import SellerVouchers from '../pages/seller/Vouchers/Vouchers';
+import SellerReviews from '../pages/seller/Reviews/Reviews';
+import SellerSupport from '../pages/seller/Support/Support';
 
 const AppRouter: React.FC = () => {
   return (
@@ -165,6 +172,7 @@ const AppRouter: React.FC = () => {
                 <Route path="dashboard" element={<HomePage />} />
                 <Route path="cart" element={<CartPage />} />
                 <Route path="wishlist" element={<WishlistPage />} />
+                <Route path="vouchers" element={<UserVouchersPage />} />
                 <Route path="orders" element={<OrderHistoryPage />} />
                 <Route path="orders/:id" element={<OrderDetailPage />} />
                 <Route path="checkout" element={<CheckoutPage />} />
@@ -188,6 +196,9 @@ const AppRouter: React.FC = () => {
                 <Route path="orders" element={<SellerOrders />} />
                 <Route path="categories" element={<SellerCategories />} />
                 <Route path="blogs" element={<SellerBlogs />} />
+                <Route path="vouchers" element={<SellerVouchers />} />
+                <Route path="reviews" element={<SellerReviews />} />
+                <Route path="support" element={<SellerSupport />} />
                 <Route path="*" element={<Navigate to="/seller/dashboard" replace />} />
               </Routes>
             </ProtectedRoute>
@@ -269,6 +280,16 @@ const AppRouter: React.FC = () => {
         }
       />
       <Route
+        path="/payment/vnpay/return"
+        element={
+          <AdminRedirect>
+            <UserLayout>
+              <VnpayReturnPage />
+            </UserLayout>
+          </AdminRedirect>
+        }
+      />
+      <Route
         path="/payment/success"
         element={
           <AdminRedirect>
@@ -317,6 +338,16 @@ const AppRouter: React.FC = () => {
           <AdminLayout>
             <ProtectedRoute requiredRole="admin">
               <AdminOrders />
+            </ProtectedRoute>
+          </AdminLayout>
+        }
+      />
+      <Route
+        path="/admin/return-requests"
+        element={
+          <AdminLayout>
+            <ProtectedRoute requiredRole="admin">
+              <AdminReturnRequests />
             </ProtectedRoute>
           </AdminLayout>
         }
@@ -392,6 +423,16 @@ const AppRouter: React.FC = () => {
         }
       />
       <Route
+        path="/admin/support"
+        element={
+          <AdminLayout>
+            <ProtectedRoute requiredRole="admin">
+              <AdminSupport />
+            </ProtectedRoute>
+          </AdminLayout>
+        }
+      />
+      <Route
         path="/admin/settings"
         element={
           <AdminLayout>
@@ -420,4 +461,3 @@ const AppRouter: React.FC = () => {
 };
 
 export default AppRouter;
-

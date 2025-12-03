@@ -43,14 +43,41 @@ export interface Voucher {
 }
 
 export interface ValidateVoucherResponse {
-  valid: boolean;
+  success: boolean;
+  errorCode?: string;
+  message?: string;
+  voucher?: {
+    code: string;
+    name: string;
+    type: string;
+    value: number;
+  };
   discountAmount: number;
   discountPercent?: number;
-  maxDiscount?: number | null;
+  freeShipping?: boolean;
   finalPrice?: number;
-  message?: string;
-  voucher?: Voucher;
+  totalAmount?: number;
 }
+
+// Error codes từ backend
+export const VOUCHER_ERROR_CODES = {
+  NOT_FOUND: "VOUCHER_NOT_FOUND",
+  INVALID_CODE: "VOUCHER_INVALID_CODE",
+  INACTIVE: "VOUCHER_INACTIVE",
+  EXPIRED: "VOUCHER_EXPIRED",
+  NOT_STARTED: "VOUCHER_NOT_STARTED",
+  OUT_OF_STOCK: "VOUCHER_OUT_OF_STOCK",
+  MIN_ORDER_NOT_MET: "VOUCHER_MIN_ORDER_NOT_MET",
+  USER_NOT_ELIGIBLE: "VOUCHER_USER_NOT_ELIGIBLE",
+  NEW_USER_ONLY: "VOUCHER_NEW_USER_ONLY",
+  FIRST_TIME_ONLY: "VOUCHER_FIRST_TIME_ONLY",
+  USER_LIMIT_EXCEEDED: "VOUCHER_USER_LIMIT_EXCEEDED",
+  PRODUCT_NOT_APPLICABLE: "VOUCHER_PRODUCT_NOT_APPLICABLE",
+  PRODUCT_EXCLUDED: "VOUCHER_PRODUCT_EXCLUDED",
+  STACKING_NOT_ALLOWED: "VOUCHER_STACKING_NOT_ALLOWED",
+  SYSTEM_ERROR: "VOUCHER_SYSTEM_ERROR",
+  CONCURRENCY_ERROR: "VOUCHER_CONCURRENCY_ERROR"
+};
 
 export interface VoucherListResponse {
   data: Voucher[];
@@ -128,35 +155,50 @@ const voucherService = {
   },
 
   /**
-   * Validate mã giảm giá
+   * Validate mã giảm giá (sử dụng integration service mới)
    */
   validateVoucher: async (
     code: string, 
     orderAmount: number,
-    cartItems?: any[]
+    cartItems?: any[],
+    shippingFee: number = 0
   ): Promise<ValidateVoucherResponse> => {
     try {
       const response = await authApi.post('/vouchers/validate', {
         code,
         orderAmount,
-        cartItems: cartItems || []
+        cartItems: cartItems || [],
+        shippingFee
       });
-      // Backend trả về: { voucher, discountAmount, discountPercent, maxDiscount, finalPrice }
+      
       const data = response.data.data;
-      return {
-        valid: true,
-        discountAmount: data.discountAmount || 0,
-        discountPercent: data.discountPercent,
-        maxDiscount: data.maxDiscount,
-        finalPrice: data.finalPrice,
-        voucher: data.voucher,
-        message: 'Voucher hợp lệ'
-      };
+      
+      if (data.success) {
+        return {
+          success: true,
+          voucher: data.voucher,
+          discountAmount: data.discountAmount || 0,
+          discountPercent: data.discountPercent,
+          freeShipping: data.freeShipping,
+          finalPrice: data.finalPrice,
+          totalAmount: data.totalAmount,
+          message: data.message || 'Voucher hợp lệ'
+        };
+      } else {
+        return {
+          success: false,
+          errorCode: data.errorCode,
+          message: data.message || 'Mã giảm giá không hợp lệ',
+          discountAmount: 0
+        };
+      }
     } catch (error: any) {
+      const errorData = error.response?.data;
       return {
-        valid: false,
-        discountAmount: 0,
-        message: error.response?.data?.message || 'Mã giảm giá không hợp lệ'
+        success: false,
+        errorCode: errorData?.errorCode || VOUCHER_ERROR_CODES.SYSTEM_ERROR,
+        message: errorData?.message || 'Mã giảm giá không hợp lệ',
+        discountAmount: 0
       };
     }
   },
@@ -203,6 +245,31 @@ const voucherService = {
   getSavedVouchers: async (): Promise<Voucher[]> => {
     const response = await authApi.get('/vouchers/saved');
     return response.data.data || [];
+  },
+
+  /**
+   * Lấy usage stats của voucher (Admin)
+   */
+  getUsageStats: async (voucherId: string): Promise<any> => {
+    const response = await authApi.get(`/vouchers/${voucherId}/usage-stats`);
+    return response.data.data;
+  },
+
+  /**
+   * Lấy danh sách usage của voucher (Admin)
+   */
+  getUsages: async (voucherId: string, params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<any> => {
+    const response = await authApi.get(`/vouchers/${voucherId}/usages`, { params });
+    return {
+      usages: response.data.data || [],
+      pagination: response.data.pagination
+    };
   }
 };
 

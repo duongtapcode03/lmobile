@@ -82,3 +82,9 @@ flashSaleUserUsageSchema.virtual("flashSale", {
 export const FlashSaleUserUsage = mongoose.model("FlashSaleUserUsage", flashSaleUserUsageSchema);
 
 
+
+
+
+
+
+

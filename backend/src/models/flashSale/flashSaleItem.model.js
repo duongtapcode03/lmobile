@@ -35,6 +35,11 @@ const flashSaleItemSchema = new mongoose.Schema(
       min: [0, "Số lượng đã bán phải >= 0"],
       default: 0
     },
+    reserved: {
+      type: Number,
+      min: [0, "Số lượng đang giữ chỗ phải >= 0"],
+      default: 0
+    },
     limit_per_user: {
       type: Number,
       min: [1, "Giới hạn mỗi người phải >= 1"],
@@ -84,10 +89,16 @@ flashSaleItemSchema.methods.getRemainingStock = function () {
   return Math.max(0, this.flash_stock - this.sold);
 };
 
+flashSaleItemSchema.methods.getAvailableStock = function () {
+  // Số lượng còn lại có thể mua = flash_stock - sold - reserved
+  return Math.max(0, this.flash_stock - this.sold - (this.reserved || 0));
+};
+
 flashSaleItemSchema.methods.canPurchase = function (quantity = 1) {
+  const available = this.getAvailableStock();
   return this.isAvailable() && 
          quantity <= this.limit_per_user && 
-         quantity <= this.getRemainingStock();
+         quantity <= available;
 };
 
 // Pre-save middleware
@@ -96,9 +107,16 @@ flashSaleItemSchema.pre("save", function(next) {
   if (this.sold > this.flash_stock) {
     return next(new Error("Số lượng đã bán không được vượt quá flash stock"));
   }
+  // Validate sold + reserved <= flash_stock
+  if (this.sold + (this.reserved || 0) > this.flash_stock) {
+    return next(new Error("Tổng số lượng đã bán và đang giữ chỗ không được vượt quá flash stock"));
+  }
   next();
 });
 
 export const FlashSaleItem = mongoose.model("FlashSaleItem", flashSaleItemSchema);
+
+
+
 
 

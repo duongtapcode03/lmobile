@@ -114,11 +114,17 @@ const Products: React.FC = () => {
     // Convert product data to form format
     // Parse price from string format (e.g., "24.990.000 ₫" or "24990000") to number for input
     let priceValue: number | undefined;
-    if (product.price) {
-      const priceStr = String(product.price).replace(/[^\d.]/g, '');
-      priceValue = parseFloat(priceStr) || undefined;
-    } else if (product.priceNumber) {
-      priceValue = product.priceNumber;
+    
+    // Ưu tiên dùng priceNumber nếu có (đây là giá trị số thực tế)
+    if (product.priceNumber !== undefined && product.priceNumber !== null) {
+      priceValue = typeof product.priceNumber === 'number' 
+        ? product.priceNumber 
+        : parseFloat(String(product.priceNumber));
+    } else if (product.price) {
+      // Nếu không có priceNumber, parse từ price string
+      // Loại bỏ tất cả ký tự không phải số (bao gồm dấu chấm phân cách hàng nghìn)
+      const priceStr = String(product.price).replace(/[^\d]/g, '');
+      priceValue = priceStr ? parseFloat(priceStr) : undefined;
     }
     
     // Đảm bảo brandRef và categoryRefs là Number (vì model sử dụng Number ID)
@@ -689,6 +695,12 @@ const Products: React.FC = () => {
 };
 
 export default Products;
+
+
+
+
+
+
 
 
 

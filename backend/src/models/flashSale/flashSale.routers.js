@@ -41,6 +41,38 @@ router.get(
  */
 router.get("/stats/all", flashSaleController.getStats);
 
+// ==================== PROTECTED ROUTES (USER) ====================
+
+/**
+ * POST /api/flash-sales/reservations
+ * Tạo reservation (giữ chỗ) flash sale
+ */
+router.post("/reservations", protect, flashSaleController.createReservation);
+
+/**
+ * POST /api/flash-sales/reservations/:reservationId/confirm
+ * Xác nhận reservation (khi thanh toán thành công)
+ */
+router.post("/reservations/:reservationId/confirm", protect, flashSaleController.confirmReservation);
+
+/**
+ * DELETE /api/flash-sales/reservations/:reservationId
+ * Hủy reservation
+ */
+router.delete("/reservations/:reservationId", protect, flashSaleController.cancelReservation);
+
+/**
+ * GET /api/flash-sales/reservations
+ * Lấy reservations của user
+ */
+router.get("/reservations", protect, flashSaleController.getUserReservations);
+
+/**
+ * GET /api/flash-sales/reservations/:reservationId/validate
+ * Validate reservation (re-check trước khi thanh toán)
+ */
+router.get("/reservations/:reservationId/validate", protect, flashSaleController.validateReservation);
+
 // ==================== PROTECTED ROUTES (ADMIN ONLY) ====================
 
 router.use(protect);
@@ -99,5 +131,29 @@ router.get("/:id/stats", flashSaleController.getStats);
  * Lấy tất cả Flash Sale (bao gồm scheduled/active/ended) - Admin only
  */
 // Route này đã được xử lý trong getAll controller
+
+/**
+ * POST /api/flash-sales/scheduled/activate
+ * Tự động kích hoạt flash sale đã đến thời gian (Cron job)
+ */
+router.post("/scheduled/activate", flashSaleController.activateScheduled);
+
+/**
+ * POST /api/flash-sales/scheduled/close
+ * Tự động đóng flash sale đã hết thời gian (Cron job)
+ */
+router.post("/scheduled/close", flashSaleController.closeExpired);
+
+/**
+ * POST /api/flash-sales/scheduled/tasks
+ * Chạy tất cả scheduled tasks (Cron job)
+ */
+router.post("/scheduled/tasks", flashSaleController.runScheduledTasks);
+
+/**
+ * POST /api/flash-sales/reservations/cleanup
+ * Cleanup reservations hết hạn (Cron job)
+ */
+router.post("/reservations/cleanup", flashSaleController.cleanupExpiredReservations);
 
 export default router;

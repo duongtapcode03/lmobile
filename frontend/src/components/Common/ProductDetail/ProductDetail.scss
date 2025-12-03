@@ -866,4 +866,137 @@
       }
     }
   }
+
+  // Related Products Horizontal Scroll
+  .related-products-wrapper {
+    position: relative;
+    width: 100%;
+    
+    .related-products-scroll {
+      width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 8px 0;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch; // Smooth scrolling on iOS
+      scroll-snap-type: x mandatory; // Snap scrolling
+      
+      // Hide scrollbar completely - allow drag/swipe scrolling
+      &::-webkit-scrollbar {
+        display: none; // Chrome, Safari, Edge
+      }
+      scrollbar-width: none; // Firefox
+      -ms-overflow-style: none; // IE/Edge
+      
+      // Enable drag scrolling
+      cursor: grab;
+      
+      &:active {
+        cursor: grabbing;
+      }
+    }
+
+    .related-products-container {
+      display: flex;
+      gap: 16px;
+      padding: 8px 0;
+      min-width: min-content;
+      
+      .related-product-item {
+        flex: 0 0 auto;
+        width: 200px;
+        scroll-snap-align: start; // Snap each item
+        scroll-snap-stop: always;
+        transition: transform 0.2s ease;
+        
+        &:hover {
+          transform: translateY(-4px);
+        }
+        
+        @media (max-width: 576px) {
+          width: 180px;
+        }
+        
+        @media (min-width: 768px) {
+          width: 220px;
+        }
+        
+        @media (min-width: 992px) {
+          width: 240px;
+        }
+      }
+    }
+
+    // Navigation buttons
+    .related-products-nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+      width: 44px;
+      height: 44px;
+      background: white;
+      border: 2px solid #e5e7eb;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      color: #333;
+      font-size: 18px;
+      
+      &:hover {
+        background: var(--primary-color, #22c55e);
+        border-color: var(--primary-color, #22c55e);
+        color: white;
+        transform: translateY(-50%) scale(1.1);
+        box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+      }
+      
+      &:active {
+        transform: translateY(-50%) scale(0.95);
+      }
+      
+      &.related-products-nav-left {
+        left: -22px;
+      }
+      
+      &.related-products-nav-right {
+        right: -22px;
+      }
+      
+      // Hide on mobile
+      @media (max-width: 768px) {
+        display: none;
+      }
+    }
+
+    // Fade gradients
+    .related-products-fade {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 60px;
+      pointer-events: none;
+      z-index: 5;
+      transition: opacity 0.3s ease;
+      
+      &.related-products-fade-left {
+        left: 0;
+        background: linear-gradient(to right, rgba(255, 255, 255, 0.95), transparent);
+      }
+      
+      &.related-products-fade-right {
+        right: 0;
+        background: linear-gradient(to left, rgba(255, 255, 255, 0.95), transparent);
+      }
+      
+      // Hide on mobile
+      @media (max-width: 768px) {
+        display: none;
+      }
+    }
+  }
 }

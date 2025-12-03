@@ -1,0 +1,23 @@
+.voucher-input {
+  width: 100%;
+
+  .ant-input {
+    border-radius: 4px 0 0 4px;
+  }
+
+  .ant-btn {
+    border-radius: 0 4px 4px 0;
+  }
+}
+
+.voucher-input-applied {
+  padding: 8px 12px;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+

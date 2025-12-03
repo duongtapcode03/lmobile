@@ -1,0 +1,78 @@
+.user-vouchers-page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+
+  .page-header {
+    margin-bottom: 24px;
+
+    .page-title {
+      font-size: 28px;
+      font-weight: 600;
+      margin: 0;
+      display: flex;
+      align-items: center;
+    }
+  }
+
+  .voucher-card {
+    transition: all 0.3s ease;
+    height: 100%;
+
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+    }
+
+    .voucher-card-content {
+      .voucher-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+
+        .voucher-code {
+          display: flex;
+          align-items: center;
+          font-size: 18px;
+          font-weight: bold;
+        }
+      }
+
+      .voucher-name {
+        font-size: 16px;
+        font-weight: 500;
+        margin-top: 12px;
+      }
+
+      .voucher-description {
+        font-size: 14px;
+        opacity: 0.9;
+        margin-top: 8px;
+      }
+
+      .voucher-value {
+        font-size: 24px;
+        font-weight: bold;
+        margin-top: 16px;
+      }
+    }
+
+    .ant-card-actions {
+      background: rgba(255, 255, 255, 0.1);
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+
+      li {
+        margin: 8px 0;
+      }
+    }
+  }
+
+  .ant-tabs {
+    .ant-tabs-tab {
+      font-size: 16px;
+    }
+  }
+}
+
+

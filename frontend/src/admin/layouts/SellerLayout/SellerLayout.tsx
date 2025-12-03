@@ -15,6 +15,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   UserOutlined,
+  CustomerServiceOutlined,
+  StarOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
@@ -37,7 +39,6 @@ const SellerLayout: React.FC<SellerLayoutProps> = ({ children }) => {
   const dispatch = useDispatch();
   
   const user = useSelector((state: RootState) => (state.auth as any).user);
-  const isAuthenticated = useSelector((state: RootState) => (state.auth as any).isAuthenticated);
 
   // Menu items for seller
   const menuItems = [
@@ -65,6 +66,16 @@ const SellerLayout: React.FC<SellerLayoutProps> = ({ children }) => {
       key: '/seller/blogs',
       icon: <FileTextOutlined />,
       label: <Link to="/seller/blogs">Bài viết</Link>,
+    },
+    {
+      key: '/seller/reviews',
+      icon: <StarOutlined />,
+      label: <Link to="/seller/reviews">Đánh giá</Link>,
+    },
+    {
+      key: '/seller/support',
+      icon: <CustomerServiceOutlined />,
+      label: <Link to="/seller/support">Hỗ trợ</Link>,
     },
   ];
 
@@ -120,7 +131,7 @@ const SellerLayout: React.FC<SellerLayoutProps> = ({ children }) => {
       >
         <div className="seller-logo">
           <Link to="/seller/dashboard">
-            {collapsed ? 'S' : 'Seller Panel'}
+            {collapsed ? 'QL' : 'Trang quản lý'}
           </Link>
         </div>
         <Menu

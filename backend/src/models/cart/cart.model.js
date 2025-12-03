@@ -9,8 +9,8 @@ const cartItemSchema = new mongoose.Schema({
   quantity: {
     type: Number,
     required: true,
-    min: [1, "Số lượng phải lớn hơn 0"],
-    max: [10, "Số lượng không được quá 10"]
+    min: [1, "Số lượng phải lớn hơn 0"]
+    // Không giới hạn max ở schema level, validation sẽ kiểm tra theo stock ở service layer
   },
   variant: {
     color: String,

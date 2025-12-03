@@ -1,6 +1,8 @@
+import mongoose from "mongoose";
 import { FlashSale } from "./flashSale.model.js";
 import { FlashSaleItem } from "./flashSaleItem.model.js";
 import { FlashSaleUserUsage } from "./flashSaleUserUsage.model.js";
+import { FlashSaleReservation } from "./flashSaleReservation.model.js";
 import { Product } from "../product/product.model.js";
 import { populateProductReferences } from "../product/product.populate.helpers.js";
 
@@ -23,7 +25,19 @@ export const flashSaleService = {
    * (1) TẠO FLASH SALE - Tạo khung thời gian Flash Sale
    */
   async createFlashSale(data) {
-    const { name, start_time, end_time, status = "active", description, created_by } = data;
+    // Loại bỏ _id nếu có (để tránh lỗi "id đã tồn tại" khi tạo mới)
+    const { _id, name, start_time, end_time, status = "inactive", description, created_by } = data;
+
+    // Log để debug
+    console.log('[FlashSaleService] createFlashSale called with data:', {
+      has_id: !!_id,
+      _id: _id,
+      name,
+      start_time,
+      end_time,
+      status,
+      created_by: created_by?.toString()
+    });
 
     // Validate thời gian
     const startTime = new Date(start_time);
@@ -33,17 +47,56 @@ export const flashSaleService = {
       throw new Error("Thời gian kết thúc phải sau thời gian bắt đầu");
     }
 
-    const flashSale = new FlashSale({
+    // Tạo object data sạch, đảm bảo không có _id
+    const flashSaleData = {
       name,
       start_time: startTime,
       end_time: endTime,
       status,
       description,
       created_by
-    });
+    };
 
-    await flashSale.save();
-    return flashSale;
+    // Đảm bảo không có _id và id trong data (loại bỏ tất cả các field không mong muốn)
+    delete flashSaleData._id;
+    delete flashSaleData.id;
+    delete flashSaleData.__v;
+
+    console.log('[FlashSaleService] Creating FlashSale with clean data:', JSON.stringify(flashSaleData, null, 2));
+
+    // Thử drop index id_1 nếu có lỗi duplicate key
+    try {
+      const flashSale = await FlashSale.create(flashSaleData);
+      console.log('[FlashSaleService] FlashSale created successfully with _id:', flashSale._id);
+      return flashSale;
+    } catch (error) {
+      // Nếu lỗi là duplicate key trên index id_1, thử drop index và tạo lại
+      if (error.code === 11000 && error.keyPattern && error.keyPattern.id === 1) {
+        console.log('[FlashSaleService] Detected duplicate key error on id_1 index, attempting to drop index...');
+        try {
+          await FlashSale.collection.dropIndex('id_1');
+          console.log('[FlashSaleService] Successfully dropped index id_1, retrying create...');
+          // Retry sau khi drop index
+          const flashSale = await FlashSale.create(flashSaleData);
+          console.log('[FlashSaleService] FlashSale created successfully after dropping index with _id:', flashSale._id);
+          return flashSale;
+        } catch (dropError) {
+          console.error('[FlashSaleService] Error dropping index id_1:', dropError);
+          // Nếu không drop được, throw original error
+        }
+      }
+      
+      console.error('[FlashSaleService] Error creating FlashSale:', error);
+      console.error('[FlashSaleService] FlashSale data:', JSON.stringify(flashSaleData, null, 2));
+      console.error('[FlashSaleService] Error details:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        keyPattern: error.keyPattern,
+        keyValue: error.keyValue
+      });
+      throw error;
+    }
   },
 
   /**
@@ -101,6 +154,10 @@ export const flashSaleService = {
    * Lấy danh sách Flash Sale (Admin)
    */
   async getAllFlashSales(query = {}) {
+    console.log(`\n[FlashSale] ========== getAllFlashSales START ==========`);
+    console.log(`[FlashSale] Query params:`, JSON.stringify(query, null, 2));
+    
+    try {
     const {
       page = 1,
       limit = 20,
@@ -130,6 +187,8 @@ export const flashSaleService = {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    console.log(`[FlashSale] Querying flash sales with filter:`, filter);
+
     const flashSales = await FlashSale.find(filter)
       .populate('created_by', 'name email')
       .sort(sort)
@@ -137,24 +196,234 @@ export const flashSaleService = {
       .limit(parseInt(limit))
       .lean();
 
+    console.log(`[FlashSale] Found ${flashSales.length} flash sales`);
+
     // Tính trạng thái thực tế và thêm thông tin items
-    const result = await Promise.all(
-      flashSales.map(async (fs) => {
-        const actualStatus = getFlashSaleStatus(fs);
-        const itemsCount = await FlashSaleItem.countDocuments({ flash_sale_id: fs._id });
+    // Tối ưu: Lấy tất cả itemsCount trong một query thay vì query từng flash sale
+    const flashSaleIds = flashSales.map(fs => {
+      // Đảm bảo _id là ObjectId
+      if (fs._id) {
+        // Khi dùng .lean(), _id có thể là string hoặc ObjectId
+        if (typeof fs._id === 'string') {
+          return new mongoose.Types.ObjectId(fs._id);
+        } else if (fs._id instanceof mongoose.Types.ObjectId) {
+          return fs._id;
+        } else {
+          // Fallback: try to convert
+          try {
+            return new mongoose.Types.ObjectId(String(fs._id));
+          } catch (e) {
+            console.error(`[FlashSale] Invalid _id format:`, fs._id);
+            return null;
+          }
+        }
+      }
+      return null;
+    }).filter(id => id != null);
+    
+    console.log(`[FlashSale] Processing ${flashSales.length} flash sales. FlashSaleIds count: ${flashSaleIds.length}`);
+    
+    const itemsCountMap = new Map();
+    
+    if (flashSaleIds.length > 0) {
+      try {
+        console.log(`[FlashSale] Starting aggregation for ${flashSaleIds.length} flash sales. FlashSaleIds:`, flashSaleIds.map(id => id.toString()).slice(0, 3));
         
-        return {
-          ...fs,
-          actualStatus,
-          itemsCount
-        };
-      })
-    );
+        const itemsCounts = await FlashSaleItem.aggregate([
+          { 
+            $match: { 
+              flash_sale_id: { 
+                $in: flashSaleIds
+              } 
+            } 
+          },
+          { 
+            $group: { 
+              _id: '$flash_sale_id', 
+              count: { $sum: 1 } 
+            } 
+          }
+        ]);
+        
+        console.log(`[FlashSale] Aggregation result:`, itemsCounts.map(item => ({
+          _id: item._id ? (item._id.toString ? item._id.toString() : String(item._id)) : 'null',
+          count: item.count
+        })));
+        
+        itemsCounts.forEach(item => {
+          // Convert _id về string để so sánh (normalize ObjectId)
+          // Aggregation trả về _id có thể là ObjectId hoặc đã được convert
+          let idStr = null;
+          if (item._id) {
+            if (item._id instanceof mongoose.Types.ObjectId) {
+              idStr = item._id.toString();
+            } else if (typeof item._id === 'string') {
+              idStr = item._id;
+            } else {
+              // Try to convert to ObjectId first, then to string
+              try {
+                const objId = new mongoose.Types.ObjectId(String(item._id));
+                idStr = objId.toString();
+              } catch (e) {
+                idStr = String(item._id);
+              }
+            }
+          }
+          if (idStr) {
+            itemsCountMap.set(idStr, item.count);
+            // Cũng lưu với ObjectId format để đảm bảo match được
+            try {
+              const objId = new mongoose.Types.ObjectId(idStr);
+              itemsCountMap.set(objId.toString(), item.count);
+            } catch (e) {
+              // Ignore
+            }
+          }
+        });
+        
+        console.log(`[FlashSale] Aggregated items count for ${itemsCounts.length} flash sales. Map size: ${itemsCountMap.size}`);
+        console.log(`[FlashSale] ItemsCountMap keys:`, Array.from(itemsCountMap.keys()));
+        console.log(`[FlashSale] ItemsCountMap values:`, Array.from(itemsCountMap.entries()).slice(0, 5));
+      } catch (error) {
+        console.error('[FlashSale] Error aggregating items count:', error);
+        // Fallback: query từng flash sale nếu aggregation fail
+        for (const fs of flashSales) {
+          try {
+            const fsId = fs._id ? (typeof fs._id === 'string' ? new mongoose.Types.ObjectId(fs._id) : fs._id) : null;
+            if (fsId) {
+              const count = await FlashSaleItem.countDocuments({ flash_sale_id: fsId });
+              itemsCountMap.set(fsId.toString(), count);
+            }
+          } catch (err) {
+            console.error(`[FlashSale] Error counting items for flash sale ${fs._id}:`, err);
+            itemsCountMap.set(fs._id ? fs._id.toString() : 'unknown', 0);
+          }
+        }
+      }
+    }
+
+    // Xử lý async để có thể query fallback nếu cần
+    const result = await Promise.all(flashSales.map(async (fs) => {
+      const actualStatus = getFlashSaleStatus(fs);
+      
+      // Normalize _id để so sánh với itemsCountMap
+      // Khi dùng .lean(), _id có thể là string hoặc ObjectId
+      let fsIdStr = null;
+      if (fs._id) {
+        if (fs._id instanceof mongoose.Types.ObjectId) {
+          fsIdStr = fs._id.toString();
+        } else if (typeof fs._id === 'string') {
+          fsIdStr = fs._id;
+        } else {
+          fsIdStr = String(fs._id);
+        }
+      } else {
+        fsIdStr = String(fs._id);
+      }
+      
+      // Lookup itemsCount từ map
+      let itemsCount = 0;
+      if (fsIdStr) {
+        itemsCount = itemsCountMap.get(fsIdStr);
+        if (itemsCount === undefined) {
+          // Nếu không tìm thấy, thử với ObjectId format
+          try {
+            const objId = new mongoose.Types.ObjectId(fsIdStr);
+            itemsCount = itemsCountMap.get(objId.toString());
+          } catch (e) {
+            // Ignore
+          }
+          if (itemsCount === undefined) {
+            // Fallback: Query trực tiếp nếu không tìm thấy trong map
+            try {
+              const fsId = typeof fs._id === 'string' ? new mongoose.Types.ObjectId(fs._id) : fs._id;
+              if (fsId) {
+                const directCount = await FlashSaleItem.countDocuments({ flash_sale_id: fsId });
+                itemsCount = directCount;
+                // Lưu vào map để lần sau dùng
+                itemsCountMap.set(fsIdStr, directCount);
+                console.log(`[FlashSale] Fallback query for ${fsIdStr}: found ${directCount} items`);
+              }
+            } catch (e) {
+              console.error(`[FlashSale] Error in fallback query for ${fsIdStr}:`, e);
+              itemsCount = 0;
+            }
+          }
+        }
+      }
+      
+      // Debug log để kiểm tra
+      if (itemsCount === 0 && flashSaleIds.length > 0) {
+        console.log(`[FlashSale] Debug: Flash sale ${fsIdStr} (${fs.name}) has itemsCount=${itemsCount}.`);
+        console.log(`[FlashSale] Available map keys:`, Array.from(itemsCountMap.keys()));
+        console.log(`[FlashSale] Flash sale _id type:`, typeof fs._id, fs._id);
+      }
+      
+      // Đảm bảo itemsCount luôn là number, không bao giờ undefined
+      const finalItemsCount = Number(itemsCount) || 0;
+      
+      console.log(`[FlashSale] Final result for ${fs.name} (${fsIdStr}): itemsCount=${finalItemsCount}`);
+      
+      // Tạo object mới với itemsCount được đảm bảo là number
+      // Lưu ý: Khi dùng .lean(), virtual fields không được include, nhưng để chắc chắn,
+      // tạo object mới và set itemsCount SAU khi spread để override nếu có
+      const resultItem = {
+        ...fs,
+        actualStatus,
+        itemsCount: finalItemsCount // Đảm bảo là number, không bao giờ undefined - set SAU spread để override
+      };
+      
+      // Double check: đảm bảo itemsCount không bao giờ undefined
+      if (resultItem.itemsCount === undefined || resultItem.itemsCount === null) {
+        console.error(`[FlashSale] ERROR: itemsCount is still undefined for ${fs.name}! Setting to 0.`);
+        resultItem.itemsCount = 0;
+      }
+      
+      // Triple check: đảm bảo itemsCount là number
+      resultItem.itemsCount = Number(resultItem.itemsCount) || 0;
+      
+      console.log(`[FlashSale] ResultItem for ${fs.name}: itemsCount=${resultItem.itemsCount}, type=${typeof resultItem.itemsCount}`);
+      
+      return resultItem;
+    }));
 
     const total = await FlashSale.countDocuments(filter);
 
-    return {
-      items: result,
+    // Final check: đảm bảo tất cả items có itemsCount
+    const finalResult = result.map(item => {
+      // Tạo object mới để đảm bảo itemsCount được set đúng
+      const finalItem = {
+        ...item,
+        itemsCount: Number(item.itemsCount) || 0 // Đảm bảo là number, không bao giờ undefined
+      };
+      
+      if (finalItem.itemsCount === undefined || finalItem.itemsCount === null || isNaN(finalItem.itemsCount)) {
+        console.error(`[FlashSale] ERROR: itemsCount is invalid in final result for ${item.name}! Setting to 0.`);
+        finalItem.itemsCount = 0;
+      }
+      
+      return finalItem;
+    });
+
+    console.log(`[FlashSale] Returning ${finalResult.length} flash sales. ItemsCount check:`, 
+      finalResult.map(fs => ({ 
+        name: fs.name, 
+        itemsCount: fs.itemsCount, 
+        itemsCountType: typeof fs.itemsCount,
+        hasItemsCount: 'itemsCount' in fs
+      }))
+    );
+    
+    // Final verification: log một item để kiểm tra
+    if (finalResult.length > 0) {
+      const sampleItem = finalResult[0];
+      console.log(`[FlashSale] Sample item keys:`, Object.keys(sampleItem));
+      console.log(`[FlashSale] Sample item itemsCount:`, sampleItem.itemsCount, typeof sampleItem.itemsCount);
+      console.log(`[FlashSale] Sample item JSON:`, JSON.stringify(sampleItem, null, 2));
+    }
+
+    const response = {
+      items: finalResult,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / parseInt(limit)),
@@ -162,6 +431,16 @@ export const flashSaleService = {
         itemsPerPage: parseInt(limit)
       }
     };
+    
+      console.log(`[FlashSale] ========== getAllFlashSales END ==========`);
+      console.log(`[FlashSale] Response items count:`, response.items.length);
+      console.log(`[FlashSale] First item has itemsCount:`, response.items[0]?.itemsCount);
+      
+      return response;
+    } catch (error) {
+      console.error(`[FlashSale] ERROR in getAllFlashSales:`, error);
+      throw error;
+    }
   },
 
   /**
@@ -233,17 +512,36 @@ export const flashSaleService = {
 
       const populatedItems = await Promise.all(
         items.map(async (item) => {
+          // Đảm bảo reserved và sold luôn là số (có thể là undefined khi dùng .lean())
+          const reserved = typeof item.reserved === 'number' ? item.reserved : 0;
+          const sold = typeof item.sold === 'number' ? item.sold : 0;
+          const flash_stock = typeof item.flash_stock === 'number' ? item.flash_stock : 0;
+          const availableStock = flash_stock - sold - reserved;
+          
           const product = productMap.get(item.product_id);
           if (product) {
             const populatedProduct = await populateProductReferences(product);
-            return {
+            // Tạo object mới với reserved và sold được đảm bảo là số (set sau spread để override)
+            const result = {
               ...item,
+              reserved: reserved, // Đảm bảo reserved luôn là số (override nếu undefined)
+              sold: sold, // Đảm bảo sold luôn là số (override nếu undefined)
               product: populatedProduct,
-              remainingStock: item.flash_stock - item.sold,
-              isAvailable: item.sold < item.flash_stock
+              remainingStock: flash_stock - sold, // Số lượng còn lại (chưa trừ reserved)
+              availableStock: availableStock, // Số lượng còn lại có thể mua (trừ reserved)
+              isAvailable: availableStock > 0
             };
+            return result;
           }
-          return item;
+          // Nếu không có product, vẫn đảm bảo reserved và sold là số
+          return {
+            ...item,
+            reserved: reserved, // Đảm bảo reserved luôn là số (override nếu undefined)
+            sold: sold, // Đảm bảo sold luôn là số (override nếu undefined)
+            remainingStock: flash_stock - sold,
+            availableStock: availableStock,
+            isAvailable: availableStock > 0
+          };
         })
       );
 
@@ -293,17 +591,35 @@ export const flashSaleService = {
 
     const populatedItems = await Promise.all(
       items.map(async (item) => {
+        // Đảm bảo reserved và sold luôn là số (có thể là undefined khi dùng .lean())
+        const reserved = typeof item.reserved === 'number' ? item.reserved : 0;
+        const sold = typeof item.sold === 'number' ? item.sold : 0;
+        const flash_stock = typeof item.flash_stock === 'number' ? item.flash_stock : 0;
+        const availableStock = flash_stock - sold - reserved;
+        
         const product = productMap.get(item.product_id);
         if (product) {
           const populatedProduct = await populateProductReferences(product);
+            // Tạo object mới với reserved và sold được đảm bảo là số (set sau spread để override)
+            return {
+              ...item,
+              reserved: reserved, // Đảm bảo reserved luôn là số (override nếu undefined)
+              sold: sold, // Đảm bảo sold luôn là số (override nếu undefined)
+              product: populatedProduct,
+              remainingStock: flash_stock - sold, // Số lượng còn lại (chưa trừ reserved)
+              availableStock: availableStock, // Số lượng còn lại có thể mua (trừ reserved)
+              isAvailable: availableStock > 0
+            };
+          }
+          // Nếu không có product, vẫn đảm bảo reserved và sold là số
           return {
             ...item,
-            product: populatedProduct,
-            remainingStock: item.flash_stock - item.sold,
-            isAvailable: item.sold < item.flash_stock
+            reserved: reserved, // Đảm bảo reserved luôn là số (override nếu undefined)
+            sold: sold, // Đảm bảo sold luôn là số (override nếu undefined)
+            remainingStock: flash_stock - sold,
+            availableStock: availableStock,
+            isAvailable: availableStock > 0
           };
-        }
-        return item;
       })
     );
 
@@ -480,12 +796,18 @@ export const flashSaleService = {
       return { available: false, reason: "Sản phẩm không có trong Flash Sale này" };
     }
 
-    const remaining = item.flash_stock - item.sold;
-    if (remaining < quantity) {
+    // Tính số lượng còn lại có thể mua (flash_stock - sold - reserved)
+    // Đảm bảo reserved và sold luôn là số (có thể là undefined khi dùng .lean())
+    const reserved = typeof item.reserved === 'number' ? item.reserved : 0;
+    const sold = typeof item.sold === 'number' ? item.sold : 0;
+    const flash_stock = typeof item.flash_stock === 'number' ? item.flash_stock : 0;
+    const availableStock = flash_stock - sold - reserved;
+    
+    if (availableStock < quantity) {
       return { 
         available: false, 
-        reason: `Chỉ còn ${remaining} sản phẩm`,
-        remaining 
+        reason: `Chỉ còn ${availableStock} sản phẩm`,
+        remaining: availableStock
       };
     }
 
@@ -517,7 +839,7 @@ export const flashSaleService = {
     return { 
       available: true, 
       flash_price: item.flash_price,
-      remaining,
+      remaining: availableStock,
       limitPerUser: item.limit_per_user,
       item
     };

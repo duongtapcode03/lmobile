@@ -245,6 +245,57 @@ export const adminService = {
         { $sort: { '_id.year': -1, '_id.month': -1, '_id.day': -1 } }
       ]);
 
+      // Thống kê doanh thu theo tuần
+      const weekMatchFilter = {
+        $and: [
+          {
+            $or: [
+              { status: 'delivered' },
+              { 'paymentInfo.status': 'paid' }
+            ]
+          },
+          { status: { $ne: 'cancelled' } },
+          { status: { $ne: 'returned' } },
+        ]
+      };
+      
+      // Thêm date filter nếu có
+      if (dateFilter.createdAt && Object.keys(dateFilter.createdAt).length > 0) {
+        weekMatchFilter.$and.push(dateFilter);
+      } else {
+        // Mặc định 12 tuần gần nhất nếu không có date range
+        weekMatchFilter.$and.push({ createdAt: { $gte: new Date(Date.now() - 12 * 7 * 24 * 60 * 60 * 1000) } });
+      }
+      
+      const revenueByWeek = await Order.aggregate([
+        {
+          $match: weekMatchFilter
+        },
+        { $unwind: '$items' },
+        {
+          $addFields: {
+            'items.revenue': {
+              $multiply: [
+                { $subtract: ['$items.price', { $ifNull: ['$items.importPrice', 0] }] },
+                { $ifNull: ['$items.quantity', 0] }
+              ]
+            }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: '$createdAt' },
+              week: { $isoWeek: '$createdAt' } // ISO week (Monday as first day)
+            },
+            total: { $sum: '$items.revenue' },
+            date: { $first: '$createdAt' }
+          }
+        },
+        { $sort: { '_id.year': -1, '_id.week': -1 } },
+        { $limit: 12 }
+      ]);
+
       // So sánh doanh thu tháng này vs tháng trước
       const now = new Date();
       const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -415,6 +466,29 @@ export const adminService = {
           total: item.total,
           label: `${item._id.day}/${item._id.month}/${item._id.year}`
         })),
+        revenueByWeek: revenueByWeek.map(item => {
+          // Tính ngày đầu tuần (Thứ 2) từ ngày bất kỳ trong tuần
+          const date = new Date(item.date);
+          const dayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+          // ISO week: Monday = 1, Sunday = 7
+          // Nếu là Chủ nhật (0), cần trừ 6 ngày để về Thứ 2
+          // Nếu không, trừ (dayOfWeek - 1) ngày để về Thứ 2
+          const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+          const weekStart = new Date(date);
+          weekStart.setDate(date.getDate() + diff);
+          weekStart.setHours(0, 0, 0, 0);
+          
+          // Tính ngày cuối tuần (Chủ nhật)
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 6);
+          weekEnd.setHours(23, 59, 59, 999);
+          
+          return {
+            date: weekStart,
+            total: item.total,
+            label: `Tuần ${item._id.week}/${item._id.year} (${weekStart.getDate()}/${weekStart.getMonth() + 1} - ${weekEnd.getDate()}/${weekEnd.getMonth() + 1})`
+          };
+        }),
         revenueComparison: {
           currentMonth: currentMonthRevenue[0]?.total || 0,
           lastMonth: lastMonthRevenue[0]?.total || 0,

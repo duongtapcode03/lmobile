@@ -7,6 +7,268 @@ import { ProductVariant } from "./productVariant.model.js";
 import mongoose from "mongoose";
 import { AppError } from "../../core/errors/AppError.js";
 import { populateProductReferences, populateProductsReferences } from "./product.populate.helpers.js";
+import { FlashSaleItem } from "../flashSale/flashSaleItem.model.js";
+import { FlashSale } from "../flashSale/flashSale.model.js";
+
+/**
+ * Helper function để attach flash sale info vào product
+ */
+async function attachFlashSaleInfo(product, productId) {
+  try {
+    const now = new Date();
+    console.log(`[Product Service] Checking flash sale for product ${productId}...`);
+    
+    // Tìm flash sale item cho product này
+    // Convert productId to number nếu cần
+    const numericProductId = typeof productId === 'number' 
+      ? productId 
+      : parseInt(String(productId).trim(), 10);
+    
+    if (isNaN(numericProductId)) {
+      console.log(`[Product Service] Invalid productId: ${productId} (cannot convert to number)`);
+      return;
+    }
+    
+    // Tìm flash sale item - thử cả number và string để đảm bảo match
+    let flashSaleItem = await FlashSaleItem.findOne({
+      product_id: numericProductId
+    }).lean();
+    
+    // Nếu không tìm thấy với number, thử tìm với string
+    if (!flashSaleItem) {
+      flashSaleItem = await FlashSaleItem.findOne({
+        product_id: String(productId)
+      }).lean();
+    }
+    
+    // Nếu vẫn không tìm thấy, thử tìm với bất kỳ format nào
+    if (!flashSaleItem) {
+      // Tìm tất cả items và filter thủ công
+      const allItems = await FlashSaleItem.find({}).lean();
+      flashSaleItem = allItems.find(item => {
+        const itemProductId = typeof item.product_id === 'number' 
+          ? item.product_id 
+          : parseInt(String(item.product_id), 10);
+        return itemProductId === numericProductId || 
+               String(item.product_id) === String(productId) ||
+               String(item.product_id) === String(numericProductId);
+      });
+    }
+    
+    if (!flashSaleItem) {
+      console.log(`[Product Service] No flash sale item found for product ${productId} (numeric: ${numericProductId})`);
+      // Debug: Kiểm tra xem có flash sale item nào với product_id khác format không
+      const allItems = await FlashSaleItem.find({}).lean();
+      const matchingItems = allItems.filter(item => {
+        const itemProductId = typeof item.product_id === 'number' 
+          ? item.product_id 
+          : parseInt(String(item.product_id), 10);
+        return itemProductId === numericProductId || 
+               String(item.product_id) === String(productId) ||
+               String(item.product_id) === String(numericProductId);
+      });
+      if (matchingItems.length > 0) {
+        console.log(`[Product Service] Found ${matchingItems.length} items with different format:`, 
+          matchingItems.map(item => ({ 
+            _id: item._id, 
+            product_id: item.product_id, 
+            product_id_type: typeof item.product_id,
+            product_id_string: String(item.product_id)
+          }))
+        );
+      } else {
+        // Kiểm tra tất cả flash sale items để debug
+        console.log(`[Product Service] Total flash sale items in DB: ${allItems.length}`);
+        if (allItems.length > 0) {
+          console.log(`[Product Service] Sample flash sale items:`, 
+            allItems.slice(0, 5).map(item => ({ 
+              _id: item._id, 
+              product_id: item.product_id, 
+              product_id_type: typeof item.product_id,
+              flash_sale_id: item.flash_sale_id
+            }))
+          );
+        }
+      }
+      return;
+    }
+    
+    console.log(`[Product Service] ✅ Found flash sale item for product ${productId}:`, {
+      itemId: flashSaleItem._id,
+      flashSaleId: flashSaleItem.flash_sale_id,
+      productId: flashSaleItem.product_id,
+      productIdType: typeof flashSaleItem.product_id,
+      flashPrice: flashSaleItem.flash_price,
+      flashStock: flashSaleItem.flash_stock
+    });
+    
+    // Kiểm tra flash sale có đang active không
+    const flashSale = await FlashSale.findById(flashSaleItem.flash_sale_id).lean();
+    
+    if (!flashSale) {
+      console.log(`[Product Service] ⚠️ Flash sale ${flashSaleItem.flash_sale_id} not found`);
+      console.log(`[Product Service] FlashSaleItem references flash_sale_id: ${flashSaleItem.flash_sale_id}`);
+      console.log(`[Product Service] Attempting to find any valid flash sale for this product...`);
+      
+      // Tìm TẤT CẢ flash sale items cho product này
+      const allFlashSaleItems = await FlashSaleItem.find({
+        product_id: numericProductId
+      }).lean();
+      
+      console.log(`[Product Service] Found ${allFlashSaleItems.length} flash sale items for product ${numericProductId}`);
+      
+      const now = new Date();
+      let validFlashSale = null;
+      let validFlashSaleItem = null;
+      
+      // Tìm flash sale item có flash_sale_id tồn tại và active
+      for (const item of allFlashSaleItems) {
+        const sale = await FlashSale.findById(item.flash_sale_id).lean();
+        if (sale) {
+          console.log(`[Product Service] Found FlashSale: ${sale._id} for item: ${item._id}`);
+          const saleStartTime = new Date(sale.start_time);
+          const saleEndTime = new Date(sale.end_time);
+          const saleIsActive = sale.status === 'active' &&
+                              saleStartTime <= now &&
+                              saleEndTime >= now;
+          
+          if (saleIsActive) {
+            console.log(`[Product Service] ✅ Found active flash sale: ${sale._id} for product ${numericProductId}`);
+            validFlashSale = sale;
+            validFlashSaleItem = item;
+            break; // Ưu tiên flash sale active đầu tiên
+          } else if (!validFlashSale) {
+            // Lưu flash sale không active làm fallback
+            validFlashSale = sale;
+            validFlashSaleItem = item;
+          }
+        }
+      }
+      
+      if (validFlashSale && validFlashSaleItem) {
+        // Sử dụng flash sale item hợp lệ
+        flashSaleItem = validFlashSaleItem;
+        const saleStartTime = new Date(validFlashSale.start_time);
+        const saleEndTime = new Date(validFlashSale.end_time);
+        const saleIsActive = validFlashSale.status === 'active' &&
+                            saleStartTime <= now &&
+                            saleEndTime >= now;
+        
+        const reserved = flashSaleItem.reserved || 0;
+        const sold = flashSaleItem.sold || 0;
+        const availableStock = Math.max(0, flashSaleItem.flash_stock - sold - reserved);
+        const remainingStock = Math.max(0, flashSaleItem.flash_stock - sold);
+        
+        product.flashSale = {
+          flashSaleId: validFlashSale._id.toString(),
+          itemId: flashSaleItem._id.toString(),
+          flashPrice: flashSaleItem.flash_price,
+          flashStock: flashSaleItem.flash_stock,
+          sold: sold,
+          reserved: reserved,
+          availableStock: availableStock,
+          remainingStock: remainingStock,
+          soldPercent: flashSaleItem.flash_stock > 0 
+            ? Math.round((sold / flashSaleItem.flash_stock) * 100) 
+            : 0,
+          limitPerUser: flashSaleItem.limit_per_user || 1,
+          isActive: saleIsActive
+        };
+        
+        console.log(`[Product Service] ✅ Attached flash sale info (using valid flash sale ${validFlashSale._id}) to product ${productId}, isActive: ${saleIsActive}`);
+        return;
+      }
+      
+      console.log(`[Product Service] ❌ No valid flash sale found for product ${productId}`);
+      return;
+    }
+    
+    // Kiểm tra flash sale có đang active không
+    const startTime = new Date(flashSale.start_time);
+    const endTime = new Date(flashSale.end_time);
+    const isAfterStart = startTime <= now;
+    const isBeforeEnd = endTime >= now;
+    const isActive = flashSale.status === 'active' && isAfterStart && isBeforeEnd;
+    
+    console.log(`[Product Service] Flash sale status check for product ${productId}:`, {
+      flashSaleId: flashSaleItem.flash_sale_id,
+      status: flashSale.status,
+      start_time: startTime.toISOString(),
+      end_time: endTime.toISOString(),
+      now: now.toISOString(),
+      isAfterStart: isAfterStart,
+      isBeforeEnd: isBeforeEnd,
+      isActive: isActive,
+      timeDiffStart: now.getTime() - startTime.getTime(),
+      timeDiffEnd: endTime.getTime() - now.getTime()
+    });
+    
+    if (!isActive) {
+      console.log(`[Product Service] Flash sale ${flashSaleItem.flash_sale_id} is not active. Status: ${flashSale.status}, Start: ${startTime}, End: ${endTime}, Now: ${now}`);
+      // Vẫn attach flashSale info nhưng đánh dấu là không active để frontend có thể hiển thị
+      // Frontend sẽ quyết định có hiển thị flash sale hay không
+      const reserved = flashSaleItem.reserved || 0;
+      const sold = flashSaleItem.sold || 0;
+      const availableStock = Math.max(0, flashSaleItem.flash_stock - sold - reserved);
+      const remainingStock = Math.max(0, flashSaleItem.flash_stock - sold);
+      
+      product.flashSale = {
+        flashSaleId: flashSale._id.toString(),
+        itemId: flashSaleItem._id.toString(),
+        flashPrice: flashSaleItem.flash_price,
+        flashStock: flashSaleItem.flash_stock,
+        sold: sold,
+        reserved: reserved,
+        availableStock: availableStock,
+        remainingStock: remainingStock,
+        soldPercent: flashSaleItem.flash_stock > 0 
+          ? Math.round((sold / flashSaleItem.flash_stock) * 100) 
+          : 0,
+        limitPerUser: flashSaleItem.limit_per_user || 1,
+        isActive: false, // Đánh dấu không active
+        status: flashSale.status,
+        startTime: startTime,
+        endTime: endTime
+      };
+      
+      console.log(`[Product Service] Attached flash sale info (inactive) to product ${productId}`);
+      return;
+    }
+    
+    // Attach flash sale info
+    const reserved = flashSaleItem.reserved || 0;
+    const sold = flashSaleItem.sold || 0;
+    const availableStock = Math.max(0, flashSaleItem.flash_stock - sold - reserved);
+    const remainingStock = Math.max(0, flashSaleItem.flash_stock - sold);
+    
+    product.flashSale = {
+      flashSaleId: flashSale._id.toString(),
+      itemId: flashSaleItem._id.toString(),
+      flashPrice: flashSaleItem.flash_price,
+      flashStock: flashSaleItem.flash_stock,
+      sold: sold,
+      reserved: reserved,
+      availableStock: availableStock,
+      remainingStock: remainingStock,
+      soldPercent: flashSaleItem.flash_stock > 0 
+        ? Math.round((sold / flashSaleItem.flash_stock) * 100) 
+        : 0,
+      limitPerUser: flashSaleItem.limit_per_user || 1
+    };
+    
+    console.log(`[Product Service] Attached flash sale info to product ${productId}:`, {
+      flashSaleId: product.flashSale.flashSaleId,
+      itemId: product.flashSale.itemId,
+      flashPrice: product.flashSale.flashPrice,
+      availableStock: product.flashSale.availableStock,
+      sold: product.flashSale.sold,
+      reserved: product.flashSale.reserved
+    });
+  } catch (error) {
+    console.error(`[Product Service] Error attaching flash sale info to product ${productId}:`, error);
+    // Không throw error, chỉ log để không ảnh hưởng đến việc load product
+  }
+}
 
 /**
  * Helper function để tìm product bằng _id (hỗ trợ cả string và number)
@@ -375,6 +637,9 @@ export const productService = {
         );
       }
       
+      // Attach flash sale info nếu product đang trong flash sale active
+      promises.push(attachFlashSaleInfo(product, productId));
+      
       await Promise.all(promises);
     }
     
@@ -456,6 +721,9 @@ export const productService = {
           })
         );
       }
+      
+      // Attach flash sale info nếu product đang trong flash sale active
+      promises.push(attachFlashSaleInfo(product, productId));
       
       await Promise.all(promises);
     }
@@ -1054,18 +1322,63 @@ export const productService = {
       ? productId 
       : parseInt(String(productId), 10);
 
-    // Tìm products có ít nhất 1 category chung
-    const relatedProducts = await Product.find({
-      _id: { $ne: productNumId },
-      categoryRefs: { $in: product.categoryRefs },
-      isActive: true
-    })
-    .populate("brandRef", "name slug logoUrl")
-    .populate("categoryRefs", "name slug")
-    .sort({ rating: -1, sold: -1 })
-    .limit(parseInt(limit));
+    const limitNum = parseInt(limit);
+    const relatedProducts = [];
 
-    return relatedProducts;
+    // Bước 1: Ưu tiên lấy sản phẩm cùng brand
+    if (product.brandRef) {
+      const brandId = typeof product.brandRef === 'object' 
+        ? product.brandRef._id 
+        : product.brandRef;
+
+      const brandProducts = await Product.find({
+        _id: { $ne: productNumId },
+        brandRef: brandId,
+        isActive: true
+      })
+      .populate("brandRef", "name slug logoUrl")
+      .populate("categoryRefs", "name slug")
+      .sort({ rating: -1, sold: -1 })
+      .limit(limitNum);
+
+      relatedProducts.push(...brandProducts);
+    }
+
+    // Bước 2: Nếu chưa đủ, lấy thêm sản phẩm cùng category
+    if (relatedProducts.length < limitNum && product.categoryRefs && product.categoryRefs.length > 0) {
+      const existingIds = new Set(relatedProducts.map(p => p._id));
+      const remaining = limitNum - relatedProducts.length;
+
+      // Lấy category IDs
+      const categoryIds = product.categoryRefs.map(cat => 
+        typeof cat === 'object' ? cat._id : cat
+      );
+
+      const categoryProducts = await Product.find({
+        _id: { $ne: productNumId, $nin: Array.from(existingIds) },
+        categoryRefs: { $in: categoryIds },
+        isActive: true
+      })
+      .populate("brandRef", "name slug logoUrl")
+      .populate("categoryRefs", "name slug")
+      .sort({ rating: -1, sold: -1 })
+      .limit(remaining);
+
+      relatedProducts.push(...categoryProducts);
+    }
+
+    // Giới hạn số lượng và loại bỏ trùng lặp
+    const uniqueProducts = [];
+    const seenIds = new Set();
+    
+    for (const product of relatedProducts) {
+      if (!seenIds.has(product._id) && uniqueProducts.length < limitNum) {
+        seenIds.add(product._id);
+        uniqueProducts.push(product);
+      }
+    }
+
+    return uniqueProducts;
   },
 
   // Tìm kiếm sản phẩm

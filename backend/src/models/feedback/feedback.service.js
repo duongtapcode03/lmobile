@@ -353,20 +353,25 @@ export const feedbackService = {
   },
 
   // Xóa feedback
-  async deleteFeedback(id, userId) {
+  async deleteFeedback(id, userId, userRole = null) {
     const feedback = await Feedback.findById(id);
     if (!feedback) {
       throw new Error("Feedback không tồn tại");
     }
 
-    // Chỉ cho phép user sở hữu feedback hoặc admin xóa
-    if (feedback.user.toString() !== userId) {
-      throw new Error("Không có quyền xóa feedback này");
-    }
+    // Cho phép seller/admin xóa bất kỳ feedback nào
+    const isAdminOrSeller = userRole === "admin" || userRole === "seller";
+    
+    if (!isAdminOrSeller) {
+      // Chỉ cho phép user sở hữu feedback xóa
+      if (feedback.user.toString() !== userId) {
+        throw new Error("Không có quyền xóa feedback này");
+      }
 
-    // Kiểm tra có thể xóa không
-    if (!feedback.canDelete) {
-      throw new Error("Không thể xóa feedback sau 24 giờ");
+      // Kiểm tra có thể xóa không (chỉ áp dụng cho user)
+      if (!feedback.canDelete) {
+        throw new Error("Không thể xóa feedback sau 24 giờ");
+      }
     }
 
     await Feedback.findByIdAndDelete(id);

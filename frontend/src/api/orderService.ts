@@ -37,7 +37,7 @@ export interface ShippingAddress {
 }
 
 export interface PaymentInfo {
-  method: 'cod' | 'bank_transfer' | 'credit_card' | 'momo' | 'zalopay';
+  method: 'cod' | 'bank_transfer' | 'credit_card' | 'momo' | 'zalopay' | 'vnpay';
   status: 'pending' | 'paid' | 'failed' | 'refunded';
   transactionId?: string;
   paidAt?: string;
@@ -85,11 +85,13 @@ export interface Order {
 
 export interface CreateOrderFromCartData {
   shippingAddress: ShippingAddress;
-  paymentMethod: 'cod' | 'bank_transfer' | 'credit_card' | 'momo' | 'zalopay';
+  paymentMethod: 'cod' | 'bank_transfer' | 'credit_card' | 'momo' | 'zalopay' | 'vnpay';
   shippingMethod?: 'standard' | 'express' | 'same_day';
   notes?: string;
   isGift?: boolean;
   giftMessage?: string;
+  selectedItemIds?: string[]; // Danh sách item IDs được chọn để thanh toán
+  flashSaleReservationIds?: string[]; // Danh sách reservation IDs nếu có flash sale items
 }
 
 export interface UpdatePaymentInfoData {
@@ -99,12 +101,14 @@ export interface UpdatePaymentInfoData {
 
 export interface OrderStats {
   totalOrders: number;
+  totalRevenue: number;
   pendingOrders: number;
   confirmedOrders: number;
-  processingOrders: number;
+  processingOrders?: number;
   shippingOrders: number;
   deliveredOrders: number;
   cancelledOrders: number;
+  returnedOrders?: number;
 }
 
 const orderService = {

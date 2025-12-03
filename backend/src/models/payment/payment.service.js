@@ -28,7 +28,6 @@ class MomoPaymentService {
 
   /**
    * Tạo QR code URL cho thanh toán MoMo
-   * Format: https://test-payment.momo.vn/pay/store/{storeSlug}?a={amount}&b={billId}&s={signature}
    */
   createQRCodeUrl(orderId, amount) {
     const storeId = process.env.MOMO_STORE_ID || 'LMobile';
@@ -50,70 +49,111 @@ class MomoPaymentService {
 
   /**
    * Tạo payment request với MoMo (Payment Link - Redirect)
+   * Theo code mẫu: sử dụng payWithMethod và signature đơn giản hơn
    */
   async createPaymentRequest(orderId, amount, orderInfo, extraData = '') {
+    // Mock mode: Nếu không có credentials hoặc set MOCK_MOMO=true
+    const useMock = process.env.MOCK_MOMO === 'true' || !this.accessKey || !this.secretKey;
+    
+    if (useMock) {
+      console.log('[MoMo Payment] Using MOCK mode (no real credentials)');
+      return this.createMockPaymentRequest(orderId, amount, orderInfo, extraData);
+    }
+
     try {
-      const requestId = `${orderId}_${Date.now()}`;
-      const requestType = 'captureWallet'; // Payment Link
+      // Tạo orderId và requestId theo code mẫu
+      const requestId = orderId;
+      const requestType = 'payWithMethod'; // Theo code mẫu
       
-      // Tạo request body
-      const requestBody = {
+      // Đảm bảo amount là số nguyên (integer) - MoMo yêu cầu
+      const amountInt = Math.round(Number(amount));
+      if (isNaN(amountInt) || amountInt <= 0) {
+        throw new Error('Số tiền thanh toán không hợp lệ');
+      }
+
+      // Theo code mẫu: extraData không cần base64 trong signature, chỉ trong request body
+      const extraDataBase64 = extraData ? Buffer.from(extraData).toString('base64') : '';
+      
+      // Tạo raw signature theo code mẫu
+      const rawSignature = 
+        'accessKey=' + this.accessKey +
+        '&amount=' + amountInt +
+        '&extraData=' + extraData +
+        '&ipnUrl=' + this.notifyUrl +
+        '&orderId=' + orderId +
+        '&orderInfo=' + orderInfo +
+        '&partnerCode=' + this.partnerCode +
+        '&redirectUrl=' + this.returnUrl +
+        '&requestId=' + requestId +
+        '&requestType=' + requestType;
+
+      const signature = crypto.createHmac('sha256', this.secretKey)
+        .update(rawSignature)
+        .digest('hex');
+      
+      const requestData = {
         partnerCode: this.partnerCode,
-        partnerName: "LMobile",
-        storeId: process.env.MOMO_STORE_ID || 'LMobile',
+        partnerName: 'LMobile',
+        storeId: 'LMobile',
         requestId: requestId,
-        amount: amount,
+        amount: amountInt,
         orderId: orderId,
         orderInfo: orderInfo,
         redirectUrl: this.returnUrl,
         ipnUrl: this.notifyUrl,
         lang: 'vi',
-        extraData: extraData,
         requestType: requestType,
         autoCapture: true,
-        orderExpireTime: 15 // 15 phút
+        extraData: extraDataBase64,
+        orderGroupId: '',
+        signature: signature
       };
 
-      // Tạo signature
-      requestBody.signature = this.createSignature({
-        amount: amount,
-        extraData: extraData,
-        orderId: orderId,
-        orderInfo: orderInfo,
-        requestId: requestId,
-        requestType: requestType
-      });
-
-      // Gọi MoMo API
-      const response = await axios.post(this.endpoint, requestBody, {
+      // Gọi API MoMo
+      const response = await axios.post(this.endpoint, requestData, {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(JSON.stringify(requestData))
         }
       });
 
       if (response.data.resultCode === 0) {
-        // Thành công - trả về payment URL để redirect
         return {
-          success: true,
-          payUrl: response.data.payUrl, // URL để redirect user đến MoMo
-          orderId: orderId,
-          amount: amount,
-          orderInfo: orderInfo,
-          requestId: requestId
+          payUrl: response.data.payUrl,
+          deeplink: response.data.deeplink,
+          qrCodeUrl: response.data.qrCodeUrl,
+          appLink: response.data.appLink,
+          requestId: requestId,
+          orderId: orderId
         };
       } else {
-        throw new Error(response.data.message || 'Lỗi khi tạo payment link MoMo');
+        throw new Error(`MoMo payment failed: ${response.data.message || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('MoMo Payment Link Error:', error);
-      throw new Error(error.response?.data?.message || error.message || 'Lỗi khi tạo payment link thanh toán MoMo');
+      console.error('[MoMo Payment] Error:', error.response?.data || error.message);
+      throw error;
     }
   }
 
   /**
-   * Xác thực callback từ MoMo
+   * Mock payment request (dùng khi không có credentials)
    */
-  verifyCallback(data) {
+  createMockPaymentRequest(orderId, amount, orderInfo, extraData) {
+    const mockPayUrl = `${this.returnUrl}?orderId=${orderId}&resultCode=0&message=Mock%20payment%20success`;
+    return {
+      payUrl: mockPayUrl,
+      deeplink: mockPayUrl,
+      qrCodeUrl: mockPayUrl,
+      appLink: mockPayUrl,
+      requestId: `${orderId}_${Date.now()}`,
+      orderId: orderId
+    };
+  }
+
+  /**
+   * Verify callback từ MoMo
+   */
+  verifyCallback(callbackData) {
     try {
       const {
         partnerCode,
@@ -129,89 +169,90 @@ class MomoPaymentService {
         responseTime,
         extraData,
         signature
-      } = data;
+      } = callbackData;
 
       // Tạo signature để verify
-      const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
-      const calculatedSignature = crypto.createHmac('sha256', this.secretKey).update(rawSignature).digest('hex');
+      const rawSignature = `accessKey=${this.accessKey}&amount=${amount}&extraData=${extraData || ''}&message=${message || ''}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType || 'momo_wallet'}&partnerCode=${partnerCode}&payType=${payType || ''}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
+      const checkSum = crypto.createHmac('sha256', this.secretKey).update(rawSignature).digest('hex');
 
-      // Verify signature
-      if (calculatedSignature !== signature) {
-        return { valid: false, error: 'Invalid signature' };
-      }
-
-      // Verify partner code
-      if (partnerCode !== this.partnerCode) {
-        return { valid: false, error: 'Invalid partner code' };
+      if (signature !== checkSum) {
+        return {
+          valid: false,
+          error: 'Invalid signature'
+        };
       }
 
       return {
         valid: true,
+        partnerCode,
         orderId,
         requestId,
-        amount,
+        amount: parseFloat(amount),
+        orderInfo,
+        orderType,
         transId,
-        resultCode,
+        resultCode: parseInt(resultCode),
         message,
-        extraData
+        payType,
+        responseTime,
+        extraData: extraData ? Buffer.from(extraData, 'base64').toString('utf-8') : ''
       };
     } catch (error) {
-      console.error('MoMo Callback Verification Error:', error);
-      return { valid: false, error: error.message };
+      console.error('[MoMo Payment] Verify callback error:', error);
+      return {
+        valid: false,
+        error: error.message
+      };
     }
   }
 
   /**
-   * Xử lý kết quả thanh toán và cập nhật order
+   * Xử lý kết quả thanh toán từ MoMo
    */
   async handlePaymentResult(verifiedData) {
-    try {
-      const { orderId, resultCode, transId, amount, message } = verifiedData;
+    if (!verifiedData.valid) {
+      throw new Error('Invalid payment data');
+    }
 
-      // Tìm order theo orderId (có thể là orderNumber)
-      const order = await Order.findOne({ 
-        $or: [
-          { orderNumber: orderId },
-          { _id: orderId }
-        ]
-      });
+    const { orderId, resultCode, amount, transId } = verifiedData;
 
-      if (!order) {
-        throw new Error(`Order not found: ${orderId}`);
+    // Tìm order
+    const order = await Order.findOne({ orderNumber: orderId });
+
+    if (!order) {
+      throw new Error(`Order not found: ${orderId}`);
+    }
+
+    // Kiểm tra số tiền
+    if (Math.abs(order.totalAmount - amount) > 0.01) {
+      throw new Error(`Amount mismatch: order=${order.totalAmount}, payment=${amount}`);
+    }
+
+    if (resultCode === 0) {
+      // Thanh toán thành công
+      order.paymentInfo.status = 'paid';
+      order.paymentInfo.transactionId = transId;
+      order.paymentInfo.paidAt = new Date();
+      if (order.status === 'pending') {
+        order.status = 'confirmed';
       }
+      await order.save();
 
-      // MoMo resultCode: 0 = success, khác 0 = failed
-      if (resultCode === 0) {
-        // Thanh toán thành công
-        order.paymentInfo.status = 'paid';
-        order.paymentInfo.transactionId = transId;
-        order.paymentInfo.paidAt = new Date();
-        order.status = 'confirmed'; // Chuyển sang trạng thái đã xác nhận
-        
-        // Trừ tồn kho
-        for (let item of order.items) {
-          await Product.findOneAndUpdate(
-            { _id: item.product },
-            { 
-              $inc: { 
-                stock: -item.quantity,
-                sold: item.quantity 
-              } 
-            }
-          );
-        }
+      return {
+        success: true,
+        message: 'Thanh toán thành công',
+        order: order
+      };
+    } else {
+      // Thanh toán thất bại
+      order.paymentInfo.status = 'failed';
+      await order.save();
 
-        await order.save();
-        return { success: true, order, message: 'Thanh toán thành công' };
-      } else {
-        // Thanh toán thất bại
-        order.paymentInfo.status = 'failed';
-        await order.save();
-        return { success: false, order, message: message || 'Thanh toán thất bại' };
-      }
-    } catch (error) {
-      console.error('Handle Payment Result Error:', error);
-      throw error;
+      return {
+        success: false,
+        message: verifiedData.message || 'Thanh toán thất bại',
+        order: order
+      };
     }
   }
 }

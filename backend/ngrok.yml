@@ -1,0 +1,30 @@
+version: "2"
+# Authtoken sẽ được cấu hình bằng lệnh: ngrok config add-authtoken YOUR_TOKEN
+# Không cần thêm authtoken vào file này nếu đã cấu hình global
+
+tunnels:
+  # Tunnel cho backend server (port 5000)
+  backend:
+    addr: 5000
+    proto: http
+    # Domain tĩnh (chỉ dùng nếu có paid plan)
+    # domain: your-static-domain.ngrok-free.app
+    
+    # Tắt inspection để giảm warning page (optional)
+    inspect: false
+    
+    # Region (optional - mặc định là us)
+    # region: us
+    # region: ap (Asia Pacific)
+    # region: eu (Europe)
+    # region: au (Australia)
+    # region: sa (South America)
+    # region: jp (Japan)
+    # region: in (India)
+
+  # Có thể thêm tunnel khác nếu cần
+  # frontend:
+  #   addr: 5173
+  #   proto: http
+  #   inspect: false
+

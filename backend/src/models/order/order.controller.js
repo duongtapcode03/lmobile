@@ -11,8 +11,17 @@ export const orderController = {
         shippingMethod,
         notes,
         isGift,
-        giftMessage
+        giftMessage,
+        selectedItemIds, // Danh sách item IDs được chọn để thanh toán
+        flashSaleReservationIds // Danh sách flash sale reservation IDs
       } = req.body;
+
+      console.log('[Order Controller] Received request to create order:', {
+        userId: req.user.id,
+        selectedItemIds,
+        flashSaleReservationIds,
+        hasFlashSaleReservations: !!flashSaleReservationIds && flashSaleReservationIds.length > 0
+      });
 
       // Validate dữ liệu đầu vào
       if (!shippingAddress || !shippingAddress.fullName || !shippingAddress.phone || !shippingAddress.address) {
@@ -35,7 +44,9 @@ export const orderController = {
         shippingMethod,
         notes,
         isGift,
-        giftMessage
+        giftMessage,
+        selectedItemIds,
+        flashSaleReservationIds
       });
 
       res.status(201).json({

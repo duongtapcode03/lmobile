@@ -20,6 +20,11 @@ import {
   Popconfirm,
   Row,
   Col,
+  Card,
+  Statistic,
+  Descriptions,
+  Tabs,
+  Spin,
 } from 'antd';
 import {
   SearchOutlined,
@@ -27,6 +32,8 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
+  BarChartOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import voucherService, { type Voucher } from '../../../api/voucherService';
@@ -48,9 +55,17 @@ const Vouchers: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
   const [form] = Form.useForm();
+  const [stats, setStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
+  const [usageStats, setUsageStats] = useState<any>(null);
+  const [usages, setUsages] = useState<any[]>([]);
+  const [usageLoading, setUsageLoading] = useState(false);
 
   useEffect(() => {
     loadVouchers();
+    loadStats();
   }, [pagination.current, pagination.pageSize, searchText]);
 
   const loadVouchers = async () => {
@@ -174,9 +189,45 @@ const Vouchers: React.FC = () => {
       await voucherService.toggleActive(id);
       message.success('Đã cập nhật trạng thái mã giảm giá');
       loadVouchers();
+      loadStats();
     } catch (error: any) {
       console.error('Failed to toggle voucher:', error);
       message.error('Không thể cập nhật trạng thái');
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      setStatsLoading(true);
+      const statsData = await voucherService.getStats();
+      setStats(statsData);
+    } catch (error: any) {
+      console.error('Failed to load stats:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const handleViewDetail = async (voucher: Voucher) => {
+    setSelectedVoucher(voucher);
+    setDetailModalVisible(true);
+    await loadVoucherDetails(voucher._id);
+  };
+
+  const loadVoucherDetails = async (voucherId: string) => {
+    try {
+      setUsageLoading(true);
+      const [statsData, usagesData] = await Promise.all([
+        voucherService.getUsageStats(voucherId),
+        voucherService.getUsages(voucherId, { limit: 10 })
+      ]);
+      setUsageStats(statsData);
+      setUsages(usagesData.usages || []);
+    } catch (error: any) {
+      console.error('Failed to load voucher details:', error);
+      message.error('Không thể tải chi tiết voucher');
+    } finally {
+      setUsageLoading(false);
     }
   };
 
@@ -273,17 +324,26 @@ const Vouchers: React.FC = () => {
     {
       title: 'Thao tác',
       key: 'action',
-      width: 90,
+      width: 150,
       fixed: 'right' as const,
       align: 'center' as const,
       render: (_: any, record: Voucher) => (
         <Space size={0}>
           <Button
             type="text"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record)}
+            size="small"
+            style={{ padding: '4px 8px' }}
+            title="Xem chi tiết"
+          />
+          <Button
+            type="text"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
             size="small"
             style={{ padding: '4px 8px' }}
+            title="Chỉnh sửa"
           />
           <Popconfirm
             title="Bạn có chắc chắn muốn xóa mã giảm giá này?"
@@ -299,6 +359,7 @@ const Vouchers: React.FC = () => {
               icon={<DeleteOutlined />}
               size="small"
               style={{ padding: '4px 8px' }}
+              title="Xóa"
             />
           </Popconfirm>
         </Space>
@@ -333,11 +394,60 @@ const Vouchers: React.FC = () => {
           >
             Thêm mã giảm giá
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={loadVouchers}>
+          <Button icon={<ReloadOutlined />} onClick={() => {
+            loadVouchers();
+            loadStats();
+          }}>
             Làm mới
           </Button>
         </Space>
       </div>
+
+      {/* Stats Cards */}
+      {stats && (
+        <Row gutter={16} style={{ marginBottom: 24 }}>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Tổng số voucher"
+                value={stats.totalVouchers || 0}
+                prefix={<BarChartOutlined />}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Voucher đang hoạt động"
+                value={stats.activeVouchers || 0}
+                valueStyle={{ color: '#3f8600' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Tổng lượt sử dụng"
+                value={stats.totalUsages || 0}
+                prefix={<BarChartOutlined />}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <Card>
+              <Statistic
+                title="Tổng giảm giá (₫)"
+                value={stats.totalDiscountAmount || 0}
+                precision={0}
+                formatter={(value) => new Intl.NumberFormat('vi-VN', {
+                  style: 'currency',
+                  currency: 'VND',
+                }).format(Number(value))}
+              />
+            </Card>
+          </Col>
+        </Row>
+      )}
 
       <Table
         columns={columns}
@@ -586,6 +696,232 @@ const Vouchers: React.FC = () => {
             <Input placeholder="https://example.com/image.jpg" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Detail Modal with Usage Stats */}
+      <Modal
+        title={`Chi tiết voucher: ${selectedVoucher?.code}`}
+        open={detailModalVisible}
+        onCancel={() => {
+          setDetailModalVisible(false);
+          setSelectedVoucher(null);
+          setUsageStats(null);
+          setUsages([]);
+        }}
+        footer={[
+          <Button key="close" onClick={() => {
+            setDetailModalVisible(false);
+            setSelectedVoucher(null);
+            setUsageStats(null);
+            setUsages([]);
+          }}>
+            Đóng
+          </Button>,
+        ]}
+        width={900}
+      >
+        <Spin spinning={usageLoading}>
+          {selectedVoucher && (
+            <Tabs defaultActiveKey="info">
+              <Tabs.TabPane tab="Thông tin" key="info">
+                <Descriptions column={2} bordered>
+                  <Descriptions.Item label="Mã voucher">
+                    <span style={{ fontWeight: 'bold', fontSize: '16px' }}>
+                      {selectedVoucher.code}
+                    </span>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Tên">{selectedVoucher.name}</Descriptions.Item>
+                  {selectedVoucher.description && (
+                    <Descriptions.Item label="Mô tả" span={2}>
+                      {selectedVoucher.description}
+                    </Descriptions.Item>
+                  )}
+                  <Descriptions.Item label="Loại">
+                    {selectedVoucher.type === 'percentage' && 'Phần trăm'}
+                    {selectedVoucher.type === 'fixed_amount' && 'Số tiền cố định'}
+                    {selectedVoucher.type === 'free_shipping' && 'Miễn phí vận chuyển'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Giá trị">
+                    {selectedVoucher.type === 'percentage' && `${selectedVoucher.value}%`}
+                    {selectedVoucher.type === 'fixed_amount' && new Intl.NumberFormat('vi-VN', {
+                      style: 'currency',
+                      currency: 'VND',
+                    }).format(selectedVoucher.value)}
+                    {selectedVoucher.type === 'free_shipping' && 'Miễn phí'}
+                  </Descriptions.Item>
+                  {selectedVoucher.maxDiscountAmount && (
+                    <Descriptions.Item label="Giảm tối đa">
+                      {new Intl.NumberFormat('vi-VN', {
+                        style: 'currency',
+                        currency: 'VND',
+                      }).format(selectedVoucher.maxDiscountAmount)}
+                    </Descriptions.Item>
+                  )}
+                  <Descriptions.Item label="Đơn hàng tối thiểu">
+                    {new Intl.NumberFormat('vi-VN', {
+                      style: 'currency',
+                      currency: 'VND',
+                    }).format(selectedVoucher.minOrderAmount || 0)}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Ngày bắt đầu">
+                    {dayjs(selectedVoucher.validFrom).format('DD/MM/YYYY HH:mm')}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Ngày kết thúc">
+                    {dayjs(selectedVoucher.validTo).format('DD/MM/YYYY HH:mm')}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Giới hạn sử dụng">
+                    {selectedVoucher.usageLimit || 'Không giới hạn'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Đã sử dụng">
+                    {selectedVoucher.usedCount || 0}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Trạng thái">
+                    <Tag color={selectedVoucher.isActive ? 'green' : 'red'}>
+                      {selectedVoucher.isActive ? 'Hoạt động' : 'Tạm dừng'}
+                    </Tag>
+                  </Descriptions.Item>
+                </Descriptions>
+              </Tabs.TabPane>
+
+              <Tabs.TabPane tab="Thống kê sử dụng" key="stats">
+                {usageStats ? (
+                  <div>
+                    <Row gutter={16} style={{ marginBottom: 24 }}>
+                      <Col span={8}>
+                        <Card>
+                          <Statistic
+                            title="Tổng lượt sử dụng"
+                            value={usageStats.totalUsages || 0}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={8}>
+                        <Card>
+                          <Statistic
+                            title="Đã sử dụng"
+                            value={usageStats.usedUsages || 0}
+                            valueStyle={{ color: '#3f8600' }}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={8}>
+                        <Card>
+                          <Statistic
+                            title="Đã hủy"
+                            value={usageStats.cancelledUsages || 0}
+                            valueStyle={{ color: '#cf1322' }}
+                          />
+                        </Card>
+                      </Col>
+                    </Row>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Card>
+                          <Statistic
+                            title="Tổng giảm giá (₫)"
+                            value={usageStats.totalDiscountAmount || 0}
+                            precision={0}
+                            formatter={(value) => new Intl.NumberFormat('vi-VN', {
+                              style: 'currency',
+                              currency: 'VND',
+                            }).format(Number(value))}
+                          />
+                        </Card>
+                      </Col>
+                      <Col span={12}>
+                        <Card>
+                          <Statistic
+                            title="Tổng doanh thu (₫)"
+                            value={usageStats.totalRevenue || 0}
+                            precision={0}
+                            formatter={(value) => new Intl.NumberFormat('vi-VN', {
+                              style: 'currency',
+                              currency: 'VND',
+                            }).format(Number(value))}
+                          />
+                        </Card>
+                      </Col>
+                    </Row>
+                  </div>
+                ) : (
+                  <div>Đang tải thống kê...</div>
+                )}
+              </Tabs.TabPane>
+
+              <Tabs.TabPane tab="Lịch sử sử dụng" key="usages">
+                {usages.length > 0 ? (
+                  <Table
+                    dataSource={usages}
+                    rowKey="_id"
+                    pagination={false}
+                    columns={[
+                      {
+                        title: 'Người dùng',
+                        dataIndex: ['user', 'name'],
+                        key: 'user',
+                        render: (text: string, record: any) => (
+                          <div>
+                            <div>{text || record.user?.email || 'N/A'}</div>
+                            {record.user?.email && (
+                              <div style={{ fontSize: '12px', color: '#999' }}>
+                                {record.user.email}
+                              </div>
+                            )}
+                          </div>
+                        ),
+                      },
+                      {
+                        title: 'Đơn hàng',
+                        dataIndex: ['order', 'orderNumber'],
+                        key: 'order',
+                        render: (text: string) => text || 'N/A',
+                      },
+                      {
+                        title: 'Giảm giá',
+                        dataIndex: 'discountAmount',
+                        key: 'discountAmount',
+                        render: (value: number) => new Intl.NumberFormat('vi-VN', {
+                          style: 'currency',
+                          currency: 'VND',
+                        }).format(value || 0),
+                      },
+                      {
+                        title: 'Tổng đơn',
+                        dataIndex: 'orderAmount',
+                        key: 'orderAmount',
+                        render: (value: number) => new Intl.NumberFormat('vi-VN', {
+                          style: 'currency',
+                          currency: 'VND',
+                        }).format(value || 0),
+                      },
+                      {
+                        title: 'Trạng thái',
+                        dataIndex: 'status',
+                        key: 'status',
+                        render: (status: string) => {
+                          const statusMap: Record<string, { text: string; color: string }> = {
+                            used: { text: 'Đã sử dụng', color: 'green' },
+                            cancelled: { text: 'Đã hủy', color: 'red' },
+                          };
+                          const statusInfo = statusMap[status] || { text: status, color: 'default' };
+                          return <Tag color={statusInfo.color}>{statusInfo.text}</Tag>;
+                        },
+                      },
+                      {
+                        title: 'Ngày sử dụng',
+                        dataIndex: 'createdAt',
+                        key: 'createdAt',
+                        render: (date: string) => dayjs(date).format('DD/MM/YYYY HH:mm'),
+                      },
+                    ]}
+                  />
+                ) : (
+                  <div>Chưa có lịch sử sử dụng</div>
+                )}
+              </Tabs.TabPane>
+            </Tabs>
+          )}
+        </Spin>
       </Modal>
     </div>
   );

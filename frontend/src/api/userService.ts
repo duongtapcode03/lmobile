@@ -107,12 +107,11 @@ export const userAPI = {
     return response.data?.data || response.data;
   },
 
-  applyCoupon: async (couponCode: string, discountAmount: number) => {
+  applyCoupon: async (couponCode: string) => {
     const response = await authApi.post('/cart/apply-coupon', {
-      couponCode,
-      discountAmount
+      couponCode: couponCode.toUpperCase()
     });
-    // Backend returns: { success: true, data: {...}, message: '...' }
+    // Backend returns: { success: true, data: { cart, voucher, discountAmount, message }, message: '...' }
     return response.data?.data || response.data;
   },
 

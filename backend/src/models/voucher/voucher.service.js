@@ -151,13 +151,13 @@ export const voucherService = {
     }
 
     // Kiểm tra user đã sử dụng voucher này chưa (mỗi user chỉ được dùng 1 voucher 1 lần)
-    // Kiểm tra tất cả các order đã sử dụng voucher này, trừ các order đã bị hủy
+    // Kiểm tra tất cả các order đã sử dụng voucher này, trừ các order đã bị hủy hoặc trả hàng
     const { Order } = await import("../order/order.model.js");
     const hasUsedBefore = await Order.findOne({
       user: userId,
       couponCode: voucher.code,
-      // Loại trừ các order đã bị hủy (cho phép dùng lại nếu order bị hủy)
-      status: { $ne: "cancelled" }
+      // Loại trừ các order đã bị hủy hoặc trả hàng (cho phép dùng lại nếu order bị hủy/trả hàng)
+      status: { $nin: ["cancelled", "returned"] }
     });
     if (hasUsedBefore) {
       throw new Error("Bạn đã sử dụng voucher này trước đó. Mỗi voucher chỉ được sử dụng một lần.");
@@ -233,6 +233,18 @@ export const voucherService = {
 
     voucher.usedCount += 1;
     await voucher.save();
+
+    return voucher;
+  },
+
+  // Hoàn lại voucher (khi order bị hủy/trả hàng)
+  async refundVoucher(code) {
+    const voucher = await this.getVoucherByCode(code);
+
+    if (voucher.usedCount > 0) {
+      voucher.usedCount -= 1;
+      await voucher.save();
+    }
 
     return voucher;
   },

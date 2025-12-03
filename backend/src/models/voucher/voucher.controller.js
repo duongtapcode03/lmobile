@@ -1,4 +1,5 @@
 import { voucherService } from "./voucher.service.js";
+import { voucherIntegrationService } from "./voucherIntegration.service.js";
 
 export const voucherController = {
   // Tạo voucher mới
@@ -72,19 +73,36 @@ export const voucherController = {
     }
   },
 
-  // Kiểm tra voucher có thể sử dụng không
+  // Kiểm tra voucher có thể sử dụng không (sử dụng integration service)
   validate: async (req, res) => {
     try {
-      const { code, cartItems = [], orderAmount = 0 } = req.body;
+      const { code, cartItems = [], orderAmount = 0, shippingFee = 0 } = req.body;
       
       if (!code) {
         return res.status(400).json({
           success: false,
+          errorCode: "VOUCHER_INVALID_CODE",
           message: "Vui lòng nhập mã voucher"
         });
       }
 
-      const result = await voucherService.validateVoucher(code, req.user.id, cartItems, orderAmount);
+      // Sử dụng voucher integration service
+      const result = await voucherIntegrationService.applyVoucherToCart(
+        code,
+        req.user.id,
+        cartItems,
+        orderAmount,
+        shippingFee
+      );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          errorCode: result.errorCode || "VOUCHER_VALIDATION_FAILED",
+          message: result.message
+        });
+      }
+
       res.json({
         success: true,
         data: result
@@ -92,7 +110,8 @@ export const voucherController = {
     } catch (error) {
       res.status(400).json({
         success: false,
-        message: error.message
+        errorCode: "VOUCHER_SYSTEM_ERROR",
+        message: error.message || "Lỗi hệ thống khi kiểm tra voucher"
       });
     }
   },
@@ -177,6 +196,41 @@ export const voucherController = {
       res.json({
         success: true,
         data: stats
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  },
+
+  // Lấy usage stats của một voucher cụ thể
+  getUsageStats: async (req, res) => {
+    try {
+      const { voucherUsageService } = await import("./voucherUsage.service.js");
+      const stats = await voucherUsageService.getVoucherUsageStats(req.params.id);
+      res.json({
+        success: true,
+        data: stats
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  },
+
+  // Lấy danh sách usage của voucher
+  getUsages: async (req, res) => {
+    try {
+      const { voucherUsageService } = await import("./voucherUsage.service.js");
+      const result = await voucherUsageService.getVoucherUsages(req.params.id, req.query);
+      res.json({
+        success: true,
+        data: result.usages,
+        pagination: result.pagination
       });
     } catch (error) {
       res.status(500).json({

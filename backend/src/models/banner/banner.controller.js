@@ -39,7 +39,9 @@ export const bannerController = {
       const banner = await bannerService.getBannerById(req.params.id);
       return successResponse(res, banner, "Lấy banner thành công");
     } catch (error) {
-      return res.status(404).json({
+      // Invalid ID format returns 400, banner not found returns 404
+      const statusCode = error.message.includes("không hợp lệ") ? 400 : 404;
+      return res.status(statusCode).json({
         success: false,
         message: error.message
       });
@@ -65,7 +67,9 @@ export const bannerController = {
       const banner = await bannerService.updateBanner(req.params.id, req.body);
       return successResponse(res, banner, "Cập nhật banner thành công");
     } catch (error) {
-      return res.status(400).json({
+      // Invalid ID format or validation error returns 400, banner not found returns 404
+      const statusCode = error.message.includes("không tồn tại") ? 404 : 400;
+      return res.status(statusCode).json({
         success: false,
         message: error.message
       });
@@ -78,7 +82,9 @@ export const bannerController = {
       await bannerService.deleteBanner(req.params.id);
       return successResponse(res, null, "Xóa banner thành công");
     } catch (error) {
-      return res.status(404).json({
+      // Invalid ID format returns 400, banner not found returns 404
+      const statusCode = error.message.includes("không hợp lệ") ? 400 : 404;
+      return res.status(statusCode).json({
         success: false,
         message: error.message
       });
@@ -91,7 +97,9 @@ export const bannerController = {
       const banner = await bannerService.toggleActive(req.params.id);
       return successResponse(res, banner, "Cập nhật trạng thái banner thành công");
     } catch (error) {
-      return res.status(404).json({
+      // Invalid ID format returns 400, banner not found returns 404
+      const statusCode = error.message.includes("không hợp lệ") ? 400 : 404;
+      return res.status(statusCode).json({
         success: false,
         message: error.message
       });

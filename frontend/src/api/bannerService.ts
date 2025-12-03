@@ -78,7 +78,8 @@ const bannerService = {
   // Lấy banner theo ID
   getBannerById: async (id: string): Promise<Banner> => {
     validateId(id);
-    const response = await axiosClient.get(`/banners/${id}`);
+    const normalizedId = id.trim();
+    const response = await axiosClient.get(`/banners/${normalizedId}`);
     return response.data.data;
   },
 
@@ -90,18 +91,24 @@ const bannerService = {
 
   // Cập nhật banner (admin only - cần auth)
   updateBanner: async (id: string, bannerData: Partial<Banner>): Promise<Banner> => {
-    const response = await authApi.put(`/banners/${id}`, bannerData);
+    validateId(id);
+    const normalizedId = id.trim();
+    const response = await authApi.put(`/banners/${normalizedId}`, bannerData);
     return response.data.data;
   },
 
   // Xóa banner (admin only - cần auth)
   deleteBanner: async (id: string): Promise<void> => {
-    await authApi.delete(`/banners/${id}`);
+    validateId(id);
+    const normalizedId = id.trim();
+    await authApi.delete(`/banners/${normalizedId}`);
   },
 
   // Toggle active status (admin only - cần auth)
   toggleActive: async (id: string): Promise<Banner> => {
-    const response = await authApi.put(`/banners/${id}/toggle`);
+    validateId(id);
+    const normalizedId = id.trim();
+    const response = await authApi.put(`/banners/${normalizedId}/toggle`);
     return response.data.data;
   },
 

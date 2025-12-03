@@ -1,4 +1,6 @@
 import { flashSaleService } from "./flashSale.service.js";
+import { flashSaleReservationService } from "./flashSaleReservation.service.js";
+import { flashSaleActivationService } from "./flashSaleActivation.service.js";
 import { catchAsync } from "../../core/middleware/errorHandler.js";
 import { createdResponse, paginatedResponse, successResponse } from "../../core/utils/response.js";
 import { convertIdToNumber } from "../../core/middleware/convertId.middleware.js";
@@ -9,12 +11,18 @@ export const flashSaleController = {
    * Public - chỉ lấy active
    */
   getAll: catchAsync(async (req, res) => {
-    // Nếu là admin và có query param admin=true, lấy tất cả
-    if (req.user && req.user.role === 'admin' && req.query.admin === 'true') {
+    console.log(`[FlashSaleController] getAll called. User:`, req.user?.role, `Admin param:`, req.query.admin);
+    
+    // Nếu có query param admin=true, lấy tất cả (cho admin page)
+    // Hoặc nếu user là admin và có query param admin=true
+    if (req.query.admin === 'true' || (req.user && req.user.role === 'admin' && req.query.admin === 'true')) {
+      console.log(`[FlashSaleController] Calling getAllFlashSales with query:`, req.query);
       const result = await flashSaleService.getAllFlashSales(req.query);
+      console.log(`[FlashSaleController] getAllFlashSales returned ${result.items.length} items`);
       paginatedResponse(res, result.items, result.pagination);
     } else {
       // Public: chỉ lấy active
+      console.log(`[FlashSaleController] Calling getActiveFlashSales`);
       const result = await flashSaleService.getActiveFlashSales(req.query);
       paginatedResponse(res, result.items, result.pagination);
     }
@@ -43,10 +51,19 @@ export const flashSaleController = {
    * (1) TẠO FLASH SALE - Tạo khung thời gian Flash Sale (Admin only)
    */
   createFlashSale: catchAsync(async (req, res) => {
+    // Loại bỏ _id nếu có trong req.body để tránh lỗi "id đã tồn tại"
+    const { _id, ...bodyWithoutId } = req.body;
+    
     const data = {
-      ...req.body,
+      ...bodyWithoutId,
       created_by: req.user._id
     };
+    
+    console.log('[FlashSaleController] Creating flash sale with data:', {
+      ...data,
+      created_by: data.created_by?.toString()
+    });
+    
     const flashSale = await flashSaleService.createFlashSale(data);
     createdResponse(res, flashSale, "Tạo Flash Sale thành công");
   }),
@@ -137,5 +154,108 @@ export const flashSaleController = {
       const stats = await flashSaleService.getAllStats();
       successResponse(res, stats);
     }
+  }),
+
+  /**
+   * Tạo reservation (giữ chỗ) flash sale (User)
+   */
+  createReservation: catchAsync(async (req, res) => {
+    const { flash_sale_id, product_id, quantity, expiresInMinutes } = req.body;
+    const userId = req.user._id;
+
+    // Lấy flash_price từ item
+    const availability = await flashSaleService.checkAvailability(
+      flash_sale_id,
+      product_id,
+      userId,
+      quantity
+    );
+
+    if (!availability.available) {
+      return res.status(400).json({
+        success: false,
+        message: availability.reason || 'Không thể tạo reservation'
+      });
+    }
+
+    const reservation = await flashSaleReservationService.createReservation({
+      user_id: userId,
+      flash_sale_id,
+      product_id,
+      quantity,
+      flash_price: availability.flash_price,
+      expiresInMinutes: expiresInMinutes || 15
+    });
+
+    createdResponse(res, reservation, 'Giữ chỗ flash sale thành công');
+  }),
+
+  /**
+   * Xác nhận reservation (khi thanh toán thành công)
+   */
+  confirmReservation: catchAsync(async (req, res) => {
+    const { reservationId, orderId } = req.body;
+    const reservation = await flashSaleReservationService.confirmReservation(reservationId, orderId);
+    successResponse(res, reservation, 'Xác nhận reservation thành công');
+  }),
+
+  /**
+   * Hủy reservation
+   */
+  cancelReservation: catchAsync(async (req, res) => {
+    const { reservationId } = req.params;
+    const reservation = await flashSaleReservationService.cancelReservation(reservationId);
+    successResponse(res, reservation, 'Hủy reservation thành công');
+  }),
+
+  /**
+   * Lấy reservations của user
+   */
+  getUserReservations: catchAsync(async (req, res) => {
+    const userId = req.user._id;
+    const { flash_sale_id } = req.query;
+    const reservations = await flashSaleReservationService.getUserReservations(userId, flash_sale_id);
+    successResponse(res, reservations);
+  }),
+
+  /**
+   * Validate reservation (re-check trước khi thanh toán)
+   */
+  validateReservation: catchAsync(async (req, res) => {
+    const { reservationId } = req.params;
+    const result = await flashSaleReservationService.validateReservation(reservationId);
+    successResponse(res, result);
+  }),
+
+  /**
+   * Tự động kích hoạt và đóng flash sale (Cron job - Admin only)
+   */
+  runScheduledTasks: catchAsync(async (req, res) => {
+    const result = await flashSaleActivationService.runScheduledTasks();
+    successResponse(res, result, 'Đã chạy scheduled tasks');
+  }),
+
+  /**
+   * Kích hoạt flash sale đã đến thời gian (Cron job - Admin only)
+   */
+  activateScheduled: catchAsync(async (req, res) => {
+    const result = await flashSaleActivationService.activateScheduledFlashSales();
+    successResponse(res, result, 'Đã kích hoạt flash sale');
+  }),
+
+  /**
+   * Đóng flash sale đã hết thời gian (Cron job - Admin only)
+   */
+  closeExpired: catchAsync(async (req, res) => {
+    const result = await flashSaleActivationService.closeExpiredFlashSales();
+    successResponse(res, result, 'Đã đóng flash sale');
+  }),
+
+  /**
+   * Cleanup reservations hết hạn (Cron job - Admin only)
+   */
+  cleanupExpiredReservations: catchAsync(async (req, res) => {
+    const result = await flashSaleReservationService.cleanupExpiredReservations();
+    successResponse(res, result, 'Đã cleanup reservations hết hạn');
   })
 };

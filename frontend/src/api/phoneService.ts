@@ -155,6 +155,16 @@ const phoneService = {
   },
 
   /**
+   * Lấy sản phẩm tương tự
+   */
+  getRelatedProducts: async (productId: number | string, limit: number = 8): Promise<PhoneDetail[]> => {
+    const response = await axiosClient.get(`/products/${productId}/related`, {
+      params: { limit }
+    });
+    return response.data.data || [];
+  },
+
+  /**
    * Lấy products quick sale (API đã bị xóa, sử dụng featured products thay thế)
    */
   getQuickSalePhones: async (limit: number = 10): Promise<PhoneDetail[]> => {

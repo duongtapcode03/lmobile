@@ -21,6 +21,8 @@ import {
   GiftOutlined,
   StarOutlined,
   ThunderboltOutlined,
+  UndoOutlined,
+  CustomerServiceOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
@@ -50,7 +52,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     {
       key: '/admin',
       icon: <DashboardOutlined />,
-      label: <Link to="/admin">Tổng quan</Link>,
+      label: <Link to="/admin">Thống kê</Link>,
     },
     {
       key: '/admin/products',
@@ -66,6 +68,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       key: '/admin/orders',
       icon: <ShoppingCartOutlined />,
       label: <Link to="/admin/orders">Đơn hàng</Link>,
+    },
+    {
+      key: '/admin/return-requests',
+      icon: <UndoOutlined />,
+      label: <Link to="/admin/return-requests">Hoàn hàng</Link>,
     },
     {
       key: '/admin/users',
@@ -101,6 +108,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       key: '/admin/flash-sales',
       icon: <ThunderboltOutlined />,
       label: <Link to="/admin/flash-sales">Flash Sales</Link>,
+    },
+    {
+      key: '/admin/support',
+      icon: <CustomerServiceOutlined />,
+      label: <Link to="/admin/support">Hỗ trợ</Link>,
     },
     {
       key: '/admin/settings',

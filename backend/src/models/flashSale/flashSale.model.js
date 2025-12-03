@@ -104,7 +104,30 @@ flashSaleSchema.pre("save", function(next) {
     // Có thể tự động set inactive nếu muốn
     // this.status = "inactive";
   }
+  // Đảm bảo không có field id (tránh conflict với index id_1)
+  if (this.id !== undefined) {
+    delete this.id;
+  }
   next();
 });
 
 export const FlashSale = mongoose.model("FlashSale", flashSaleSchema);
+
+// Drop index id_1 nếu tồn tại (index này không cần thiết và gây conflict)
+// Chạy sau khi model được tạo để đảm bảo collection đã sẵn sàng
+setTimeout(async () => {
+  try {
+    const indexes = await FlashSale.collection.indexes();
+    const hasIdIndex = indexes.some(idx => idx.name === 'id_1' || (idx.key && idx.key.id === 1));
+    
+    if (hasIdIndex) {
+      await FlashSale.collection.dropIndex('id_1');
+      console.log('[FlashSale] Successfully dropped index id_1');
+    }
+  } catch (err) {
+    // Ignore error nếu index không tồn tại hoặc đã bị xóa
+    if (err.code !== 27 && err.codeName !== 'IndexNotFound' && err.message && !err.message.includes('index not found')) {
+      console.warn('[FlashSale] Could not drop index id_1:', err.message);
+    }
+  }
+}, 1000); // Đợi 1 giây để đảm bảo connection đã sẵn sàng

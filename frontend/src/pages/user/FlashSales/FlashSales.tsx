@@ -32,24 +32,37 @@ const FlashSalesPage: React.FC = () => {
   const loadFlashSales = async () => {
     try {
       setLoading(true);
-      const params: any = {
+      // Lấy danh sách flash sales đang active
+      const flashSalesResponse = await flashSaleService.getActiveFlashSales({
         page: pagination.current,
         limit: pagination.pageSize,
-        sortBy: 'sort_order',
-        sortOrder: 'asc',
-      };
+      });
 
-      if (sessionFilter !== 'all') {
-        params.session_id = sessionFilter;
-      }
+      // Lấy items của từng flash sale
+      const flashSalesWithItems = await Promise.all(
+        (flashSalesResponse.data || []).map(async (flashSale: FlashSale) => {
+          try {
+            const itemsResponse = await flashSaleService.getFlashSaleItems(flashSale._id!, {
+              page: 1,
+              limit: 100, // Lấy tất cả items
+            });
+            return {
+              ...flashSale,
+              items: itemsResponse.data || [],
+            };
+          } catch (error) {
+            console.error(`Failed to load items for flash sale ${flashSale._id}:`, error);
+            return { ...flashSale, items: [] };
+          }
+        })
+      );
 
-      const response = await flashSaleService.getActiveFlashSales(params);
-      setFlashSales(response.data || []);
+      setFlashSales(flashSalesWithItems);
       
-      if (response.pagination) {
+      if (flashSalesResponse.pagination) {
         setPagination(prev => ({
           ...prev,
-          total: response.pagination!.totalItems,
+          total: flashSalesResponse.pagination!.totalItems,
         }));
       }
     } catch (error) {
@@ -60,24 +73,27 @@ const FlashSalesPage: React.FC = () => {
     }
   };
 
-  const getSessionLabel = (sessionId: string) => {
-    const sessionMap: Record<string, string> = {
-      morning: 'Sáng',
-      afternoon: 'Chiều',
-      evening: 'Tối',
-      night: 'Đêm',
-    };
-    return sessionMap[sessionId] || sessionId;
-  };
+  // Remove session filter since new structure doesn't use sessions
+  // const getSessionLabel = (sessionId: string) => {
+  //   const sessionMap: Record<string, string> = {
+  //     morning: 'Sáng',
+  //     afternoon: 'Chiều',
+  //     evening: 'Tối',
+  //     night: 'Đêm',
+  //   };
+  //   return sessionMap[sessionId] || sessionId;
+  // };
 
-  // Convert flash sales to products for ProductCard
+  // Convert flash sale items to products for ProductCard
   const products = flashSales
-    .filter(item => item.product && item.product._id)
-    .map(item => {
+    .flatMap(flashSale => (flashSale.items || []).map(item => ({ flashSale, item })))
+    .filter(({ item }) => item.product && item.product._id)
+    .map(({ flashSale, item }) => {
       const product = item.product!;
-      const remaining = item.total_stock - item.sold;
-      const soldPercent = item.total_stock > 0 
-        ? Math.round((item.sold / item.total_stock) * 100) 
+      const availableStock = item.availableStock ?? (item.flash_stock - item.sold - (item.reserved || 0));
+      const remaining = item.flash_stock - item.sold;
+      const soldPercent = item.flash_stock > 0 
+        ? Math.round((item.sold / item.flash_stock) * 100) 
         : 0;
 
       return {
@@ -99,16 +115,18 @@ const FlashSalesPage: React.FC = () => {
           ? Math.round(((product.priceNumber - item.flash_price) / product.priceNumber) * 100)
           : 0,
         flashSale: {
-          id: item.id,
+          flashSaleId: flashSale._id,
+          itemId: item._id,
           flash_price: item.flash_price,
-          total_stock: item.total_stock,
+          flash_stock: item.flash_stock,
           sold: item.sold,
+          reserved: item.reserved || 0,
           remaining: remaining,
+          availableStock: availableStock, // Số lượng còn lại có thể mua
           soldPercent: soldPercent,
           limit_per_user: item.limit_per_user,
-          session_id: item.session_id,
         },
-        stock: remaining,
+        stock: availableStock, // Sử dụng availableStock thay vì remaining
         isFlashSale: true,
       } as PhoneDetail & { flashSale: any };
     });
@@ -129,18 +147,7 @@ const FlashSalesPage: React.FC = () => {
             <Title level={1} className="page-title">
               <ThunderboltOutlined /> Flash Sales
             </Title>
-            <Select
-              style={{ width: 200 }}
-              placeholder="Lọc theo session"
-              value={sessionFilter}
-              onChange={setSessionFilter}
-            >
-              <Option value="all">Tất cả session</Option>
-              <Option value="morning">Sáng</Option>
-              <Option value="afternoon">Chiều</Option>
-              <Option value="evening">Tối</Option>
-              <Option value="night">Đêm</Option>
-            </Select>
+            {/* Session filter removed - new structure doesn't use sessions */}
           </div>
 
           {loading && flashSales.length === 0 ? (
@@ -160,25 +167,20 @@ const FlashSalesPage: React.FC = () => {
                   return (
                     <Col xs={12} sm={12} md={8} lg={6} xl={6} key={product._id || product.sku}>
                       <div className="flash-sale-product-wrapper">
-                        {flashSale && flashSale.remaining <= 5 && flashSale.remaining > 0 && (
+                        {flashSale && flashSale.availableStock <= 5 && flashSale.availableStock > 0 && (
                           <Tag color="red" className="low-stock-badge">
-                            Còn {flashSale.remaining} sản phẩm
+                            Còn {flashSale.availableStock} sản phẩm
                           </Tag>
                         )}
-                        {flashSale && flashSale.remaining === 0 && (
+                        {flashSale && flashSale.availableStock === 0 && (
                           <Tag color="default" className="sold-out-badge">
                             Hết hàng
-                          </Tag>
-                        )}
-                        {flashSale && (
-                          <Tag color="blue" className="session-badge">
-                            <FireOutlined /> {getSessionLabel(flashSale.session_id)}
                           </Tag>
                         )}
                         {flashSale && flashSale.soldPercent > 0 && (
                           <div className="sold-progress-bar">
                             <div className="progress-label">
-                              Đã bán {flashSale.sold}/{flashSale.total_stock}
+                              Đã bán {flashSale.sold}/{flashSale.flash_stock}
                             </div>
                             <div className="progress-bar">
                               <div 

@@ -96,7 +96,23 @@ export const feedbackController = {
   // Xóa feedback
   delete: async (req, res) => {
     try {
-      const result = await feedbackService.deleteFeedback(req.params.id, req.user.id);
+      const result = await feedbackService.deleteFeedback(req.params.id, req.user.id, req.user.role);
+      res.json({
+        success: true,
+        message: result.message
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  },
+
+  // Xóa feedback (Admin/Seller) - alias cho delete
+  deleteByAdmin: async (req, res) => {
+    try {
+      const result = await feedbackService.deleteFeedback(req.params.id, req.user.id, req.user.role);
       res.json({
         success: true,
         message: result.message

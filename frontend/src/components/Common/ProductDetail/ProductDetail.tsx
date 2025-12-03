@@ -6,8 +6,7 @@ import {
   Typography, 
   Spin, 
   Button, 
-  Carousel, 
-  message
+  Carousel
 } from 'antd';
 import type { CarouselRef } from 'antd/es/carousel';
 import { 
@@ -17,14 +16,18 @@ import {
   RightOutlined,
   GiftOutlined,
   CaretDownOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  ArrowRightOutlined
 } from '@ant-design/icons';
 import phoneService from '../../../api/phoneService';
+import flashSaleService from '../../../api/flashSaleService';
 import type { PhoneDetail } from '../../../types';
+import ProductCard from '../../ProductCard/ProductCard';
 import { PageWrapper } from '../CommonComponents';
 import ProductReviews from '../ProductReviews/ProductReviews';
 import { useSelector, useDispatch } from 'react-redux';
 import { addToCart as addToCartAction, fetchCart } from '../../../features/cart/cartSlice';
+import { useToast } from '../../../contexts/ToastContext';
 import './ProductDetail.scss';
 
 const { Title } = Typography;
@@ -36,18 +39,28 @@ interface ProductDetailProps {
 const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-detail-page' }) => {
   const { id, slug } = useParams<{ id?: string; slug?: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [product, setProduct] = useState<PhoneDetail | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
+  const [quantityError, setQuantityError] = useState<string | null>(null);
   const [showAllPromotions, setShowAllPromotions] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
   const [isContentOverflowing, setIsContentOverflowing] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [relatedProducts, setRelatedProducts] = useState<PhoneDetail[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
   const carouselRef = useRef<CarouselRef>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const relatedProductsScrollRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef<boolean>(false);
+  const dragStartX = useRef<number>(0);
+  const scrollStartX = useRef<number>(0);
   const dispatch = useDispatch();
   
   // Get auth state from Redux
@@ -79,15 +92,23 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
           name: productData.name,
           hasVersions: !!productData.versions,
           versionsCount: productData.versions?.length || 0,
-          versions: productData.versions?.map(v => ({ sku: v.sku, _id: v._id, keys: Object.keys(v) })) || []
+          versions: productData.versions?.map(v => ({ sku: v.sku, _id: v._id, keys: Object.keys(v) })) || [],
+          hasFlashSale: !!(productData as any).flashSale,
+          flashSaleInfo: (productData as any).flashSale ? {
+            flashSaleId: (productData as any).flashSale.flashSaleId,
+            itemId: (productData as any).flashSale.itemId,
+            flashPrice: (productData as any).flashSale.flashPrice,
+            availableStock: (productData as any).flashSale.availableStock
+          } : null
         });
         setProduct(productData);
         // Reset quantity về 1 khi load sản phẩm mới
         setQuantity(1);
+        setQuantityError(null);
       } catch (err: any) {
         console.error('Error loading product:', err);
         setError(err.message || 'Không thể tải thông tin sản phẩm');
-        message.error('Không thể tải thông tin sản phẩm');
+        toast.error('Không thể tải thông tin sản phẩm');
       } finally {
         setLoading(false);
       }
@@ -95,6 +116,131 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
 
     loadProduct();
   }, [id, slug]);
+
+  // Load related products when product is loaded
+  useEffect(() => {
+    const loadRelatedProducts = async () => {
+      if (!product || !product._id) return;
+
+      try {
+        setLoadingRelated(true);
+        const productId = product._id;
+        const related = await phoneService.getRelatedProducts(productId, 8);
+        // Filter out current product from related products (backend đã filter nhưng để chắc chắn)
+        const filteredRelated = related.filter(
+          (p: PhoneDetail) => String(p._id) !== String(productId)
+        );
+        setRelatedProducts(filteredRelated);
+      } catch (error) {
+        console.error('Error loading related products:', error);
+        // Silent fail - don't show error to user
+        setRelatedProducts([]);
+      } finally {
+        setLoadingRelated(false);
+      }
+    };
+
+    loadRelatedProducts();
+  }, [product]);
+
+  // Handle scroll position for related products
+  useEffect(() => {
+    const scrollContainer = relatedProductsScrollRef.current;
+    if (!scrollContainer) return;
+
+    const checkScrollPosition = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollContainer;
+      setCanScrollLeft(scrollLeft > 0);
+      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 1);
+    };
+
+    // Check initial state
+    checkScrollPosition();
+
+    // Check on scroll
+    scrollContainer.addEventListener('scroll', checkScrollPosition);
+    
+    // Check on resize
+    window.addEventListener('resize', checkScrollPosition);
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', checkScrollPosition);
+      window.removeEventListener('resize', checkScrollPosition);
+    };
+  }, [relatedProducts]);
+
+  // Enable drag scrolling
+  useEffect(() => {
+    const scrollContainer = relatedProductsScrollRef.current;
+    if (!scrollContainer) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // Don't start drag if clicking on a link or button
+      const target = e.target as HTMLElement;
+      if (target.closest('a') || target.closest('button')) {
+        return;
+      }
+
+      isDraggingRef.current = true;
+      dragStartX.current = e.pageX;
+      scrollStartX.current = scrollContainer.scrollLeft;
+      scrollContainer.style.cursor = 'grabbing';
+      scrollContainer.style.userSelect = 'none';
+      e.preventDefault();
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      e.preventDefault();
+      const x = e.pageX;
+      const walk = (x - dragStartX.current) * 1.5; // Scroll speed multiplier
+      scrollContainer.scrollLeft = scrollStartX.current - walk;
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        scrollContainer.style.cursor = 'grab';
+        scrollContainer.style.userSelect = 'auto';
+      }
+    };
+
+    const handleMouseLeave = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        scrollContainer.style.cursor = 'grab';
+        scrollContainer.style.userSelect = 'auto';
+      }
+    };
+
+    scrollContainer.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    scrollContainer.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      scrollContainer.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      scrollContainer.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
+
+  // Scroll functions for navigation buttons
+  const scrollRelatedProducts = (direction: 'left' | 'right') => {
+    const scrollContainer = relatedProductsScrollRef.current;
+    if (!scrollContainer) return;
+
+    const scrollAmount = 300; // Scroll 300px at a time
+    const targetScroll = direction === 'left' 
+      ? scrollContainer.scrollLeft - scrollAmount
+      : scrollContainer.scrollLeft + scrollAmount;
+
+    scrollContainer.scrollTo({
+      left: targetScroll,
+      behavior: 'smooth'
+    });
+  };
 
   // Check if content is overflowing
   useEffect(() => {
@@ -182,7 +328,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
 
     if (!product) {
       console.log('[BuyNow] No product');
-      message.warning('Sản phẩm không tồn tại');
+      toast.warning('Sản phẩm không tồn tại');
       return;
     }
 
@@ -199,7 +345,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
     // Kiểm tra đăng nhập - BẮT BUỘC
     if (!isAuthenticated) {
       console.log('[BuyNow] Not authenticated, redirecting to login');
-      message.warning('Vui lòng đăng nhập để mua hàng');
+      toast.warning('Vui lòng đăng nhập để mua hàng');
       navigate('/login', { state: { from: `/product/${product.slug || product._id}` } });
       return;
     }
@@ -208,21 +354,21 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
     const stock = product.stock || 0;
     const availability = product.availability || 0;
     if (stock === 0 || availability === 0) {
-      message.error('Sản phẩm đã hết hàng');
+      toast.error('Sản phẩm đã hết hàng');
       return;
     }
 
     // BẮT BUỘC chọn version nếu sản phẩm có versions
     if (product.versions && product.versions.length > 0 && !selectedVersion) {
       console.log('[BuyNow] Version required but not selected');
-      message.warning('Vui lòng chọn phiên bản sản phẩm');
+      toast.warning('Vui lòng chọn phiên bản sản phẩm');
       return;
     }
 
     // BẮT BUỘC chọn màu nếu sản phẩm có colors
     if (product.colors && product.colors.length > 0 && !selectedColor) {
       console.log('[BuyNow] Color required but not selected');
-      message.warning('Vui lòng chọn màu sản phẩm');
+      toast.warning('Vui lòng chọn màu sản phẩm');
       return;
     }
 
@@ -237,15 +383,64 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
 
       // Validate quantity không vượt quá stock
       if (quantity > stock) {
-        message.error(`Số lượng không được vượt quá ${stock} sản phẩm`);
+        toast.error(`Số lượng không được vượt quá ${stock} sản phẩm`);
         setAddingToCart(false);
         return;
       }
 
       if (quantity < 1) {
-        message.error('Số lượng phải lớn hơn 0');
+        toast.error('Số lượng phải lớn hơn 0');
         setAddingToCart(false);
         return;
+      }
+
+      // Tạo reservation nếu là flash sale (giống handleAddToCart)
+      let reservationId: string | null = null;
+      const flashSaleInfo = (product as any).flashSale;
+      console.log(`[BuyNow] Flash sale info:`, flashSaleInfo);
+      
+      if (flashSaleInfo && flashSaleInfo.flashSaleId && flashSaleInfo.itemId) {
+        try {
+          const numericProductId = typeof productId === 'number' ? productId : parseInt(productId, 10);
+          console.log(`[BuyNow] Creating flash sale reservation:`, {
+            flash_sale_id: flashSaleInfo.flashSaleId,
+            product_id: numericProductId,
+            quantity: quantity
+          });
+          
+          const reservation = await flashSaleService.createReservation({
+            flash_sale_id: flashSaleInfo.flashSaleId,
+            product_id: numericProductId,
+            quantity: quantity,
+            expiresInMinutes: 15
+          });
+          
+          reservationId = reservation._id || null;
+          console.log(`[BuyNow] Reservation created:`, reservationId);
+          
+          if (reservationId) {
+            // Lưu reservation ID vào localStorage để dùng khi thanh toán
+            const existingReservations = JSON.parse(localStorage.getItem('flashSaleReservations') || '[]');
+            const reservationData = {
+              reservationId,
+              productId: numericProductId,
+              quantity,
+              flashSaleId: flashSaleInfo.flashSaleId
+            };
+            existingReservations.push(reservationData);
+            localStorage.setItem('flashSaleReservations', JSON.stringify(existingReservations));
+            console.log(`[BuyNow] Saved reservation to localStorage:`, reservationData);
+            console.log(`[BuyNow] All reservations in localStorage:`, existingReservations);
+            toast.success('Đã giữ chỗ flash sale thành công (15 phút)');
+          }
+        } catch (error: any) {
+          console.error('[BuyNow] Failed to create flash sale reservation:', error);
+          toast.error(error.response?.data?.message || 'Không thể giữ chỗ flash sale. Vui lòng thử lại.');
+          setAddingToCart(false);
+          return;
+        }
+      } else {
+        console.log(`[BuyNow] No flash sale info or missing flashSaleId/itemId. FlashSaleInfo:`, flashSaleInfo);
       }
 
       // Tìm variantId từ selectedVersion (SKU của variant) - BẮT BUỘC nếu có versions
@@ -253,7 +448,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
       
       if (product.versions && product.versions.length > 0) {
         if (!selectedVersion) {
-          message.warning('Vui lòng chọn phiên bản sản phẩm');
+          toast.warning('Vui lòng chọn phiên bản sản phẩm');
           setAddingToCart(false);
           return;
         }
@@ -287,6 +482,14 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
         }
       }
 
+      // Lấy cart hiện tại trước khi thêm để so sánh
+      const currentCartResult = await dispatch(fetchCart() as any);
+      const currentCart = currentCartResult.payload || null;
+      // Chuyển đổi tất cả IDs sang string để so sánh chính xác
+      const currentItemIds = new Set(
+        (currentCart?.items || []).map((item: any) => String(item._id))
+      );
+
       // Dispatch Redux action để thêm vào giỏ hàng (API mới - chỉ cần productId, quantity, variantId)
       const addToCartResult = await dispatch(addToCartAction({
         productId: productId,
@@ -302,7 +505,76 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
       }
 
       // Fetch lại giỏ hàng để cập nhật số lượng
-      await dispatch(fetchCart() as any);
+      const updatedCartResult = await dispatch(fetchCart() as any);
+      const updatedCart = updatedCartResult.payload || null;
+
+      // Tìm item mới được thêm vào bằng cách so sánh với cart cũ
+      let newItemId: string | null = null;
+      if (updatedCart && updatedCart.items && updatedCart.items.length > 0) {
+        // Tìm item mới (không có trong cart cũ) - so sánh bằng string để đảm bảo chính xác
+        const newItem = updatedCart.items.find((item: any) => {
+          const itemIdStr = String(item._id);
+          return !currentItemIds.has(itemIdStr);
+        });
+        
+        if (newItem && newItem._id) {
+          newItemId = String(newItem._id);
+          console.log('[BuyNow] Found new item ID:', newItemId);
+        } else {
+          // Fallback: Nếu không tìm thấy item mới (có thể do backend merge với item cũ),
+          // tìm item có productId và variantId khớp
+          const matchingItem = updatedCart.items.find((item: any) => {
+            const itemProductId = typeof item.product === 'object' ? item.product._id : item.product;
+            const matchesProduct = String(itemProductId) === String(productId);
+            const matchesVariant = variantId 
+              ? (String(item.variant?._id) === String(variantId) || String(item.variantId) === String(variantId))
+              : !item.variant && !item.variantId; // Nếu không có variantId, item cũng không nên có variant
+            return matchesProduct && matchesVariant;
+          });
+          
+          if (matchingItem && matchingItem._id) {
+            newItemId = String(matchingItem._id);
+            console.log('[BuyNow] Found matching item ID:', newItemId);
+          } else {
+            // Fallback cuối cùng: Nếu cart trống trước đó, lấy item cuối cùng
+            // Nếu cart không trống, lấy item có quantity khớp với quantity vừa thêm
+            if (currentItemIds.size === 0) {
+              // Cart trống trước đó, lấy item cuối cùng
+              const lastItem = updatedCart.items[updatedCart.items.length - 1];
+              if (lastItem && lastItem._id) {
+                newItemId = String(lastItem._id);
+                console.log('[BuyNow] Cart was empty, using last item ID:', newItemId);
+              }
+            } else {
+              // Tìm item có quantity khớp với quantity vừa thêm (có thể là item được update)
+              const quantityMatchedItem = updatedCart.items.find((item: any) => {
+                const itemProductId = typeof item.product === 'object' ? item.product._id : item.product;
+                return String(itemProductId) === String(productId) && item.quantity === quantity;
+              });
+              
+              if (quantityMatchedItem && quantityMatchedItem._id) {
+                newItemId = String(quantityMatchedItem._id);
+                console.log('[BuyNow] Found item with matching quantity:', newItemId);
+              } else {
+                // Fallback cuối cùng: Lấy item cuối cùng trong cart
+                const lastItem = updatedCart.items[updatedCart.items.length - 1];
+                if (lastItem && lastItem._id) {
+                  newItemId = String(lastItem._id);
+                  console.log('[BuyNow] Using last item ID as final fallback:', newItemId);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Lưu ID item vừa thêm vào localStorage để checkout page chỉ hiển thị item này
+      if (newItemId) {
+        localStorage.setItem('selectedCartItems', JSON.stringify([newItemId]));
+        console.log('[BuyNow] Saved selectedCartItems to localStorage:', [newItemId]);
+      } else {
+        console.warn('[BuyNow] Could not find new item ID, checkout will show all items');
+      }
 
       console.log('[BuyNow] Success! Redirecting to checkout...');
       
@@ -311,7 +583,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
     } catch (err: any) {
       console.error('Error in buy now:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Không thể thêm sản phẩm vào giỏ hàng';
-      message.error(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setAddingToCart(false);
     }
@@ -332,7 +604,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
 
     if (!product) {
       console.log('[AddToCart] No product');
-      message.warning('Sản phẩm không tồn tại');
+      toast.warning('Sản phẩm không tồn tại');
       return;
     }
 
@@ -349,7 +621,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
     // Kiểm tra đăng nhập - BẮT BUỘC
     if (!isAuthenticated) {
       console.log('[AddToCart] Not authenticated, redirecting to login');
-      message.warning('Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng');
+      toast.warning('Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng');
       navigate('/login', { state: { from: `/product/${product.slug || product._id}` } });
       return;
     }
@@ -358,21 +630,21 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
     const stock = product.stock || 0;
     const availability = product.availability || 0;
     if (stock === 0 || availability === 0) {
-      message.error('Sản phẩm đã hết hàng');
+      toast.error('Sản phẩm đã hết hàng');
       return;
     }
 
     // BẮT BUỘC chọn version nếu sản phẩm có versions
     if (product.versions && product.versions.length > 0 && !selectedVersion) {
       console.log('[AddToCart] Version required but not selected');
-      message.warning('Vui lòng chọn phiên bản sản phẩm');
+      toast.warning('Vui lòng chọn phiên bản sản phẩm');
       return;
     }
 
     // BẮT BUỘC chọn màu nếu sản phẩm có colors
     if (product.colors && product.colors.length > 0 && !selectedColor) {
       console.log('[AddToCart] Color required but not selected');
-      message.warning('Vui lòng chọn màu sản phẩm');
+      toast.warning('Vui lòng chọn màu sản phẩm');
       return;
     }
 
@@ -387,15 +659,72 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
 
       // Validate quantity không vượt quá stock
       if (quantity > stock) {
-        message.error(`Số lượng không được vượt quá ${stock} sản phẩm`);
+        const errorMsg = `Số lượng không được vượt quá ${stock} sản phẩm`;
+        setQuantityError(errorMsg);
+        toast.error(errorMsg);
         setAddingToCart(false);
         return;
       }
 
       if (quantity < 1) {
-        message.error('Số lượng phải lớn hơn 0');
+        const errorMsg = 'Số lượng phải lớn hơn 0';
+        setQuantityError(errorMsg);
+        toast.error(errorMsg);
         setAddingToCart(false);
         return;
+      }
+      
+      // Clear error nếu quantity hợp lệ
+      setQuantityError(null);
+
+      // Tạo reservation nếu là flash sale
+      let reservationId: string | null = null;
+      const flashSaleInfo = (product as any).flashSale;
+      console.log(`[ProductDetail] Flash sale info:`, flashSaleInfo);
+      console.log(`[ProductDetail] Product ID:`, productId, typeof productId);
+      
+      if (flashSaleInfo && flashSaleInfo.flashSaleId && flashSaleInfo.itemId) {
+        try {
+          const numericProductId = typeof productId === 'number' ? productId : parseInt(productId, 10);
+          console.log(`[ProductDetail] Creating flash sale reservation:`, {
+            flash_sale_id: flashSaleInfo.flashSaleId,
+            product_id: numericProductId,
+            quantity: quantity
+          });
+          
+          const reservation = await flashSaleService.createReservation({
+            flash_sale_id: flashSaleInfo.flashSaleId,
+            product_id: numericProductId,
+            quantity: quantity,
+            expiresInMinutes: 15
+          });
+          
+          reservationId = reservation._id || null;
+          console.log(`[ProductDetail] Reservation created:`, reservationId);
+          
+          if (reservationId) {
+            // Lưu reservation ID vào localStorage để dùng khi thanh toán
+            const existingReservations = JSON.parse(localStorage.getItem('flashSaleReservations') || '[]');
+            const reservationData = {
+              reservationId,
+              productId: numericProductId,
+              quantity,
+              flashSaleId: flashSaleInfo.flashSaleId
+            };
+            existingReservations.push(reservationData);
+            localStorage.setItem('flashSaleReservations', JSON.stringify(existingReservations));
+            console.log(`[ProductDetail] Saved reservation to localStorage:`, reservationData);
+            console.log(`[ProductDetail] All reservations in localStorage:`, existingReservations);
+            toast.success('Đã giữ chỗ flash sale thành công (15 phút)');
+          }
+        } catch (error: any) {
+          console.error('[AddToCart] Failed to create flash sale reservation:', error);
+          toast.error(error.response?.data?.message || 'Không thể giữ chỗ flash sale. Vui lòng thử lại.');
+          setAddingToCart(false);
+          return;
+        }
+      } else {
+        console.log(`[ProductDetail] No flash sale info or missing flashSaleId/itemId. FlashSaleInfo:`, flashSaleInfo);
       }
 
       // Tìm variantId từ selectedVersion (SKU của variant) - BẮT BUỘC nếu có versions
@@ -403,7 +732,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
       
       if (product.versions && product.versions.length > 0) {
         if (!selectedVersion) {
-          message.warning('Vui lòng chọn phiên bản sản phẩm');
+          toast.warning('Vui lòng chọn phiên bản sản phẩm');
           setAddingToCart(false);
           return;
         }
@@ -438,7 +767,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
             variantData: selectedVersionData,
             hasVariantsArray: !!(product as any).variants
           });
-          message.error('Phiên bản đã chọn không hợp lệ');
+          toast.error('Phiên bản đã chọn không hợp lệ');
           setAddingToCart(false);
           return;
         }
@@ -468,14 +797,17 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
       await dispatch(fetchCart() as any);
 
       console.log('[AddToCart] Success!');
-      message.success('Đã thêm sản phẩm vào giỏ hàng');
+      toast.success('Đã thêm sản phẩm vào giỏ hàng');
+      
+      // Clear error khi thành công
+      setQuantityError(null);
       
       // Tự động redirect đến trang giỏ hàng
       navigate('/user/cart');
     } catch (err: any) {
       console.error('Error adding to cart:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Không thể thêm sản phẩm vào giỏ hàng';
-      message.error(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setAddingToCart(false);
     }
@@ -806,96 +1138,148 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
               </div>
 
               {/* Quantity Selector */}
-              <div className="box-quantity" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #d9d9d9', borderRadius: '4px', overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (quantity > 1) {
-                        setQuantity(quantity - 1);
-                      }
-                    }}
-                    disabled={addingToCart || (product.stock === 0) || quantity <= 1}
-                    style={{
-                      width: '36px',
-                      height: '40px',
-                      border: 'none',
-                      background: '#f5f5f5',
-                      cursor: quantity > 1 ? 'pointer' : 'not-allowed',
-                      fontSize: '18px',
-                      fontWeight: 'bold',
-                      color: quantity > 1 ? '#333' : '#ccc',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      userSelect: 'none'
-                    }}
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    max={product.stock || 1}
-                    value={quantity}
-                    onChange={(e) => {
-                      const value = parseInt(e.target.value, 10);
-                      if (!isNaN(value) && value > 0) {
-                        const maxStock = product.stock || 1;
-                        setQuantity(Math.min(Math.max(1, value), maxStock));
-                      } else if (e.target.value === '') {
-                        setQuantity(1);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const value = parseInt(e.target.value, 10);
-                      if (isNaN(value) || value < 1) {
-                        setQuantity(1);
-                      }
-                    }}
-                    disabled={addingToCart || (product.stock === 0)}
-                    style={{
-                      width: '60px',
-                      height: '40px',
-                      border: 'none',
-                      borderLeft: '1px solid #d9d9d9',
-                      borderRight: '1px solid #d9d9d9',
-                      textAlign: 'center',
-                      fontSize: '16px',
-                      outline: 'none',
-                      padding: '0 8px'
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const maxStock = product.stock || 1;
-                      if (quantity < maxStock) {
-                        setQuantity(quantity + 1);
-                      }
-                    }}
-                    disabled={addingToCart || (product.stock === 0) || quantity >= (product.stock || 1)}
-                    style={{
-                      width: '36px',
-                      height: '40px',
-                      border: 'none',
-                      background: '#f5f5f5',
-                      cursor: quantity < (product.stock || 1) ? 'pointer' : 'not-allowed',
-                      fontSize: '18px',
-                      fontWeight: 'bold',
-                      color: quantity < (product.stock || 1) ? '#333' : '#ccc',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      userSelect: 'none'
-                    }}
-                  >
-                    +
-                  </button>
+              <div className="box-quantity" style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: quantityError ? '4px' : '0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', border: quantityError ? '1px solid #ff4d4f' : '1px solid #d9d9d9', borderRadius: '4px', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (quantity > 1) {
+                          setQuantity(quantity - 1);
+                          setQuantityError(null); // Clear error khi giảm số lượng
+                        }
+                      }}
+                      disabled={addingToCart || (product.stock === 0) || quantity <= 1}
+                      style={{
+                        width: '36px',
+                        height: '40px',
+                        border: 'none',
+                        background: '#f5f5f5',
+                        cursor: quantity > 1 ? 'pointer' : 'not-allowed',
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        color: quantity > 1 ? '#333' : '#ccc',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        userSelect: 'none'
+                      }}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={product.stock || 1}
+                      value={quantity}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value, 10);
+                        const maxStock = product.stock || 0;
+                        
+                        if (e.target.value === '') {
+                          // Cho phép input rỗng khi đang nhập
+                          setQuantity(1);
+                          setQuantityError(null);
+                          return;
+                        }
+                        
+                        if (!isNaN(value) && value > 0) {
+                          if (value > maxStock && maxStock > 0) {
+                            // Vượt quá stock, tự động điều chỉnh và hiển thị cảnh báo
+                            setQuantity(maxStock);
+                            const errorMsg = `Số lượng không được vượt quá ${maxStock} sản phẩm. Đã tự động điều chỉnh về ${maxStock}.`;
+                            setQuantityError(errorMsg);
+                            toast.warning(errorMsg, 3000);
+                          } else {
+                            setQuantity(Math.min(Math.max(1, value), maxStock || 1));
+                            setQuantityError(null); // Clear error khi hợp lệ
+                          }
+                        } else if (value <= 0) {
+                          setQuantity(1);
+                          setQuantityError(null);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const value = parseInt(e.target.value, 10);
+                        const maxStock = product.stock || 0;
+                        
+                        if (isNaN(value) || value < 1) {
+                          setQuantity(1);
+                          setQuantityError(null);
+                        } else if (value > maxStock && maxStock > 0) {
+                          // Nếu vượt quá stock, điều chỉnh về stock
+                          setQuantity(maxStock);
+                          const errorMsg = `Số lượng không được vượt quá ${maxStock} sản phẩm. Đã tự động điều chỉnh về ${maxStock}.`;
+                          setQuantityError(errorMsg);
+                          toast.warning(errorMsg, 3000);
+                        } else {
+                          setQuantity(value);
+                          setQuantityError(null); // Clear error khi hợp lệ
+                        }
+                      }}
+                      disabled={addingToCart || (product.stock === 0)}
+                      style={{
+                        width: '60px',
+                        height: '40px',
+                        border: 'none',
+                        borderLeft: '1px solid #d9d9d9',
+                        borderRight: '1px solid #d9d9d9',
+                        textAlign: 'center',
+                        fontSize: '16px',
+                        outline: 'none',
+                        padding: '0 8px'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const maxStock = product.stock || 0;
+                        if (quantity < maxStock && maxStock > 0) {
+                          setQuantity(quantity + 1);
+                          setQuantityError(null); // Clear error khi tăng số lượng
+                        } else if (maxStock === 0) {
+                          toast.error('Sản phẩm đã hết hàng');
+                        } else if (quantity >= maxStock) {
+                          const errorMsg = `Số lượng không được vượt quá ${maxStock} sản phẩm`;
+                          setQuantityError(errorMsg);
+                          toast.warning(errorMsg, 3000);
+                        }
+                      }}
+                      disabled={addingToCart || (product.stock === 0) || quantity >= (product.stock || 1)}
+                      style={{
+                        width: '36px',
+                        height: '40px',
+                        border: 'none',
+                        background: '#f5f5f5',
+                        cursor: quantity < (product.stock || 1) ? 'pointer' : 'not-allowed',
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        color: quantity < (product.stock || 1) ? '#333' : '#ccc',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        userSelect: 'none'
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <span style={{ color: '#666' }}>
+                    (Còn {product.stock || 0} sản phẩm)
+                  </span>
                 </div>
-                <span style={{ color: '#666' }}>
-                  (Còn {product.stock || 0} sản phẩm)
-                </span>
+                {/* Validation Error Message */}
+                {quantityError && (
+                  <div style={{ 
+                    color: '#ff4d4f', 
+                    fontSize: '12px', 
+                    marginTop: '4px',
+                    marginLeft: '0',
+                    lineHeight: '1.5'
+                  }}>
+                    {quantityError}
+                  </div>
+                )}
               </div>
 
               {/* Order Buttons */}
@@ -991,6 +1375,63 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ className = 'product-deta
                 productId={product._id} 
                 productName={product.name}
               />
+            </Col>
+          </Row>
+        )}
+
+        {/* Related Products Section */}
+        {relatedProducts.length > 0 && (
+          <Row style={{ marginTop: 48 }}>
+            <Col span={24}>
+              <div style={{ marginBottom: 24 }}>
+                <Title level={2} style={{ marginBottom: 0 }}>
+                  Sản phẩm tương tự
+                </Title>
+              </div>
+              {loadingRelated ? (
+                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                  <Spin size="large" />
+                </div>
+              ) : (
+                <div className="related-products-wrapper">
+                  {canScrollLeft && (
+                    <button
+                      className="related-products-nav-btn related-products-nav-left"
+                      onClick={() => scrollRelatedProducts('left')}
+                      aria-label="Scroll left"
+                    >
+                      <ArrowLeftOutlined />
+                    </button>
+                  )}
+                  <div 
+                    className="related-products-scroll"
+                    ref={relatedProductsScrollRef}
+                  >
+                    <div className="related-products-container">
+                      {relatedProducts.map((relatedProduct) => (
+                        <div 
+                          key={relatedProduct._id || relatedProduct.sku}
+                          className="related-product-item"
+                        >
+                          <ProductCard product={relatedProduct} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {canScrollRight && (
+                    <button
+                      className="related-products-nav-btn related-products-nav-right"
+                      onClick={() => scrollRelatedProducts('right')}
+                      aria-label="Scroll right"
+                    >
+                      <ArrowRightOutlined />
+                    </button>
+                  )}
+                  {/* Fade gradients */}
+                  {canScrollLeft && <div className="related-products-fade related-products-fade-left" />}
+                  {canScrollRight && <div className="related-products-fade related-products-fade-right" />}
+                </div>
+              )}
             </Col>
           </Row>
         )}

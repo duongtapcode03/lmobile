@@ -22,8 +22,14 @@ router.post("/", authorize("admin"), voucherController.create);
 router.get("/", authorize("admin"), voucherController.getAll);
 router.get("/stats", authorize("admin"), voucherController.getStats);
 router.get("/:id", authorize("admin"), voucherController.getById);
+router.get("/:id/usages", authorize("admin"), voucherController.getUsages);
+router.get("/:id/usage-stats", authorize("admin"), voucherController.getUsageStats);
 router.put("/:id", authorize("admin"), voucherController.update);
 router.delete("/:id", authorize("admin"), voucherController.delete);
 router.put("/:id/toggle", authorize("admin"), voucherController.toggleActive);
+
+// Seller routes (nếu seller cần xem stats của voucher)
+// Seller chỉ có thể xem, không thể tạo/sửa/xóa
+router.get("/seller/stats", authorize("seller"), voucherController.getStats);
 
 export default router;

@@ -10,22 +10,20 @@ router.get("/product/:productId", feedbackController.getByProduct);
 // Protected routes (cần xác thực)
 router.use(protect);
 
-// User routes
+// Seller và Admin routes
+router.post("/:id/respond", authorize("seller", "admin"), feedbackController.respond);
+router.get("/", authorize("seller", "admin"), feedbackController.getAll);
+router.get("/pending", authorize("seller", "admin"), feedbackController.getPending);
+router.get("/stats", authorize("seller", "admin"), feedbackController.getStats);
+router.get("/:id", authorize("seller", "admin"), feedbackController.getById);
+router.put("/:id/status", authorize("seller", "admin"), feedbackController.updateStatus);
+
+// User routes (delete route chung cho cả user và seller/admin, logic xử lý trong service)
 router.post("/", feedbackController.create);
 router.get("/my-feedback", feedbackController.getUserFeedback);
 router.put("/:id", feedbackController.update);
 router.delete("/:id", feedbackController.delete);
 router.post("/:id/helpful", feedbackController.markHelpful);
 router.post("/:id/report", feedbackController.report);
-
-// Seller và Admin routes
-router.post("/:id/respond", authorize("seller", "admin"), feedbackController.respond);
-
-// Admin routes
-router.get("/", authorize("admin"), feedbackController.getAll);
-router.get("/pending", authorize("admin"), feedbackController.getPending);
-router.get("/stats", authorize("admin"), feedbackController.getStats);
-router.get("/:id", authorize("admin"), feedbackController.getById);
-router.put("/:id/status", authorize("admin"), feedbackController.updateStatus);
 
 export default router;

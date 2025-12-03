@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Banner } from "./banner.model.js";
 
 export const bannerService = {
@@ -92,7 +93,18 @@ export const bannerService = {
 
   // Lấy banner theo ID
   async getBannerById(id) {
-    const banner = await Banner.findById(id);
+    // Normalize ID (trim whitespace)
+    const normalizedId = typeof id === 'string' ? id.trim() : id;
+    
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(normalizedId)) {
+      throw new Error("ID banner không hợp lệ");
+    }
+    
+    // Convert to ObjectId and query
+    const objectId = new mongoose.Types.ObjectId(normalizedId);
+    const banner = await Banner.findById(objectId);
+    
     if (!banner) {
       throw new Error("Banner không tồn tại");
     }
@@ -126,8 +138,18 @@ export const bannerService = {
 
   // Cập nhật banner
   async updateBanner(id, data) {
+    // Normalize ID (trim whitespace)
+    const normalizedId = typeof id === 'string' ? id.trim() : id;
+    
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(normalizedId)) {
+      throw new Error("ID banner không hợp lệ");
+    }
+    
+    // Convert to ObjectId and update
+    const objectId = new mongoose.Types.ObjectId(normalizedId);
     const banner = await Banner.findByIdAndUpdate(
-      id,
+      objectId,
       { $set: data },
       { new: true, runValidators: true }
     );
@@ -141,16 +163,39 @@ export const bannerService = {
 
   // Xóa banner
   async deleteBanner(id) {
-    const banner = await Banner.findByIdAndDelete(id);
+    // Normalize ID (trim whitespace)
+    const normalizedId = typeof id === 'string' ? id.trim() : id;
+    
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(normalizedId)) {
+      throw new Error("ID banner không hợp lệ");
+    }
+    
+    // Convert to ObjectId and delete
+    const objectId = new mongoose.Types.ObjectId(normalizedId);
+    const banner = await Banner.findByIdAndDelete(objectId);
+    
     if (!banner) {
       throw new Error("Banner không tồn tại");
     }
+    
     return banner;
   },
 
   // Toggle active status
   async toggleActive(id) {
-    const banner = await Banner.findById(id);
+    // Normalize ID (trim whitespace)
+    const normalizedId = typeof id === 'string' ? id.trim() : id;
+    
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(normalizedId)) {
+      throw new Error("ID banner không hợp lệ");
+    }
+    
+    // Convert to ObjectId and find
+    const objectId = new mongoose.Types.ObjectId(normalizedId);
+    const banner = await Banner.findById(objectId);
+    
     if (!banner) {
       throw new Error("Banner không tồn tại");
     }
@@ -163,9 +208,20 @@ export const bannerService = {
 
   // Cập nhật sort order
   async updateSortOrder(banners) {
-    const updatePromises = banners.map(({ id, sortOrder }) =>
-      Banner.findByIdAndUpdate(id, { sortOrder }, { new: true })
-    );
+    const updatePromises = banners.map(({ id, sortOrder }) => {
+      // Normalize ID (trim whitespace)
+      const normalizedId = typeof id === 'string' ? id.trim() : id;
+      
+      // Validate ObjectId format
+      if (!mongoose.Types.ObjectId.isValid(normalizedId)) {
+        throw new Error(`ID banner không hợp lệ: ${id}`);
+      }
+      
+      // Convert string ID to ObjectId for query
+      const objectId = new mongoose.Types.ObjectId(normalizedId);
+      
+      return Banner.findByIdAndUpdate(objectId, { sortOrder }, { new: true });
+    });
     
     await Promise.all(updatePromises);
     return { success: true };

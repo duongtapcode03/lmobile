@@ -23,6 +23,11 @@ export interface DashboardStats {
     total: number;
     label: string;
   }>;
+  revenueByWeek: Array<{
+    date: Date | string;
+    total: number;
+    label: string;
+  }>;
   revenueComparison: {
     currentMonth: number;
     lastMonth: number;
@@ -96,6 +101,7 @@ export const adminService = {
       topProducts: Array.isArray(data?.topProducts) ? data.topProducts : [],
       revenueByMonth: Array.isArray(data?.revenueByMonth) ? data.revenueByMonth : [],
       revenueByDay: Array.isArray(data?.revenueByDay) ? data.revenueByDay : [],
+      revenueByWeek: Array.isArray(data?.revenueByWeek) ? data.revenueByWeek : [],
       revenueComparison: data?.revenueComparison || {
         currentMonth: 0,
         lastMonth: 0,

@@ -1,0 +1,147 @@
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  pointer-events: none;
+  max-width: 400px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.toast {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: #fff;
+  min-height: 56px;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateX(120%) translateY(-20px);
+  opacity: 0;
+  max-width: 100%;
+  width: 100%;
+
+  &.toast-visible {
+    transform: translateX(0) translateY(0);
+    opacity: 1;
+  }
+
+  &.toast-hidden {
+    transform: translateX(120%) translateY(-20px);
+    opacity: 0;
+  }
+
+  &:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  // Success toast
+  &.toast-success {
+    border-left: 4px solid #52c41a;
+    background: #f6ffed;
+
+    .toast-icon {
+      color: #52c41a;
+      flex-shrink: 0;
+    }
+  }
+
+  // Error toast
+  &.toast-error {
+    border-left: 4px solid #ff4d4f;
+    background: #fff2f0;
+
+    .toast-icon {
+      color: #ff4d4f;
+      flex-shrink: 0;
+    }
+  }
+
+  // Warning toast
+  &.toast-warning {
+    border-left: 4px solid #faad14;
+    background: #fffbe6;
+
+    .toast-icon {
+      color: #faad14;
+      flex-shrink: 0;
+    }
+  }
+
+  // Info toast
+  &.toast-info {
+    border-left: 4px solid #1890ff;
+    background: #e6f7ff;
+
+    .toast-icon {
+      color: #1890ff;
+      flex-shrink: 0;
+    }
+  }
+}
+
+.toast-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.2s;
+
+  &:hover {
+    color: #333;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .toast-container {
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+
+  .toast {
+    max-width: 100%;
+  }
+}
+

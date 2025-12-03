@@ -8,6 +8,7 @@ import brandRoutes from "../models/brand/brand.routers.js";
 import productRoutes from "../models/product/product.routers.js";
 import cartRoutes from "../models/cart/cart.routers.js";
 import orderRoutes from "../models/order/order.routers.js";
+import returnRequestRoutes from "../models/order/returnRequest.routers.js";
 import paymentRoutes from "../models/payment/payment.routers.js";
 import voucherRoutes from "../models/voucher/voucher.routers.js";
 import blogRoutes from "../models/blog/blog.routers.js";
@@ -19,6 +20,7 @@ import flashSaleRoutes from "../models/flashSale/flashSale.routers.js";
 import bannerRoutes from "../models/banner/banner.routers.js";
 import adminRoutes from "../models/admin/admin.routers.js";
 import sellerRoutes from "../models/seller/seller.routers.js";
+import chatRoutes from "../models/chat/chat.routers.js";
 import { catchAsync } from "../core/middleware/errorHandler.js";
 
 const router = express.Router();
@@ -54,6 +56,9 @@ router.use("/addresses", addressRoutes);
 // Order routes
 router.use("/orders", orderRoutes);
 
+// Return Request routes
+router.use("/return-requests", returnRequestRoutes);
+
 // Payment routes
 router.use("/payment", paymentRoutes);
 
@@ -83,5 +88,8 @@ router.use("/admin", (req, res, next) => {
 
 // Seller routes
 router.use("/seller", sellerRoutes);
+
+// Chat routes
+router.use("/chat", chatRoutes);
 
 export default router;

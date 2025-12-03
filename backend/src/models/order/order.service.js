@@ -1,7 +1,12 @@
+import mongoose from "mongoose";
 import { Order } from "./order.model.js";
 import { Cart } from "../cart/cart.model.js";
 import { Product } from "../product/product.model.js";
 import { cartService } from "../cart/cart.service.js";
+import { voucherService } from "../voucher/voucher.service.js";
+import { voucherIntegrationService } from "../voucher/voucherIntegration.service.js";
+import { VoucherUsage } from "../voucher/voucherUsage.model.js";
+import { flashSaleReservationService } from "../flashSale/flashSaleReservation.service.js";
 
 export const orderService = {
   // Tạo đơn hàng từ giỏ hàng
@@ -12,7 +17,9 @@ export const orderService = {
       shippingMethod = "standard",
       notes = "",
       isGift = false,
-      giftMessage = ""
+      giftMessage = "",
+      selectedItemIds = null, // Danh sách item IDs được chọn để thanh toán
+      flashSaleReservationIds = null // Danh sách reservation IDs nếu có flash sale items
     } = orderData;
 
     // Lấy giỏ hàng
@@ -21,9 +28,74 @@ export const orderService = {
       throw new Error("Giỏ hàng trống");
     }
 
+    // Nếu có selectedItemIds, filter cart items chỉ lấy các item đã chọn
+    let cartItems = cart.items;
+    if (selectedItemIds && Array.isArray(selectedItemIds) && selectedItemIds.length > 0) {
+      // Convert selectedItemIds to strings để đảm bảo so sánh đúng
+      const selectedItemIdsStr = selectedItemIds.map(id => String(id));
+      
+      console.log(`[Order] Filtering cart items with selectedItemIds:`, {
+        selectedItemIds: selectedItemIds,
+        selectedItemIdsStr: selectedItemIdsStr,
+        totalCartItems: cart.items.length,
+        cartItemIds: cart.items.map(item => item._id.toString())
+      });
+      
+      cartItems = cart.items.filter(item => {
+        const itemIdStr = String(item._id);
+        const isSelected = selectedItemIdsStr.includes(itemIdStr);
+        if (!isSelected) {
+          console.log(`[Order] Item ${itemIdStr} (type: ${typeof item._id}) not in selectedItemIds`);
+        }
+        return isSelected;
+      });
+      
+      console.log(`[Order] Filtered result:`, {
+        originalCount: cart.items.length,
+        filteredCount: cartItems.length,
+        selectedItemIdsCount: selectedItemIds.length,
+        filteredItemIds: cartItems.map(item => String(item._id))
+      });
+      
+      if (cartItems.length === 0) {
+        throw new Error("Không có sản phẩm nào được chọn để thanh toán");
+      }
+      console.log(`[Order] Creating order with ${cartItems.length} selected items out of ${cart.items.length} total items`);
+    } else {
+      console.log(`[Order] No selectedItemIds provided, using all ${cart.items.length} cart items`);
+    }
+
+    // Validate flash sale reservations nếu có
+    const reservationMap = new Map(); // Map productId -> reservation
+    console.log(`[Order] Flash sale reservation IDs received:`, flashSaleReservationIds);
+    
+    if (flashSaleReservationIds && Array.isArray(flashSaleReservationIds) && flashSaleReservationIds.length > 0) {
+      console.log(`[Order] Validating ${flashSaleReservationIds.length} flash sale reservations...`);
+      for (const reservationId of flashSaleReservationIds) {
+        console.log(`[Order] Validating reservation ${reservationId}...`);
+        const validation = await flashSaleReservationService.validateReservation(reservationId);
+        if (!validation.valid) {
+          console.error(`[Order] Reservation ${reservationId} is invalid:`, validation.reason);
+          throw new Error(validation.reason || 'Flash sale reservation không hợp lệ');
+        }
+
+        // Kiểm tra reservation thuộc về user này
+        if (validation.reservation.user_id.toString() !== userId.toString()) {
+          console.error(`[Order] Reservation ${reservationId} does not belong to user ${userId}`);
+          throw new Error('Reservation không thuộc về bạn');
+        }
+
+        console.log(`[Order] Reservation ${reservationId} validated. Product ID: ${validation.reservation.product_id}, Quantity: ${validation.reservation.quantity}`);
+        reservationMap.set(validation.reservation.product_id, validation.reservation);
+      }
+      console.log(`[Order] All ${flashSaleReservationIds.length} reservations validated successfully`);
+    } else {
+      console.log(`[Order] No flash sale reservations to validate. flashSaleReservationIds:`, flashSaleReservationIds);
+    }
+
     // Kiểm tra lại tồn kho và giá
     const productMap = new Map(); // Lưu product info để dùng sau
-    for (let item of cart.items) {
+    for (let item of cartItems) {
       // Đảm bảo product ID là Number
       const productId = typeof item.product === 'number' 
         ? item.product 
@@ -38,25 +110,40 @@ export const orderService = {
         throw new Error(`Sản phẩm ${item.productName || 'không xác định'} không còn bán`);
       }
 
-      if (product.stock < item.quantity) {
-        throw new Error(`Sản phẩm ${product.name} không đủ hàng`);
+      // Kiểm tra nếu có reservation flash sale
+      const reservation = reservationMap.get(productId);
+      if (reservation) {
+        // Kiểm tra quantity khớp với reservation
+        if (item.quantity !== reservation.quantity) {
+          throw new Error(`Số lượng sản phẩm ${product.name} không khớp với reservation`);
+        }
+        // Sử dụng giá flash sale
+        item.price = reservation.flash_price;
+      } else {
+        // Kiểm tra stock thông thường
+        if (product.stock < item.quantity) {
+          throw new Error(`Sản phẩm ${product.name} không đủ hàng`);
+        }
+        // Cập nhật giá mới nhất
+        item.price = product.priceNumber || product.price;
       }
 
-      // Cập nhật giá mới nhất
-      item.price = product.priceNumber || product.price;
       // Lưu product info để dùng khi tạo order items (sử dụng Number ID làm key)
       productMap.set(productId, product);
     }
 
-    // Tính phí vận chuyển
+    // Tính subtotal từ các items đã chọn để tính shippingFee
+    const selectedSubtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    // Tính phí vận chuyển dựa trên subtotal của các items đã chọn
     const shippingFee = cartService.calculateShippingFee(
-      cart.totalAmount, 
+      selectedSubtotal, 
       shippingMethod, 
       shippingAddress.province
     );
 
     // Tạo items cho đơn hàng
-    const orderItems = cart.items.map(item => {
+    const orderItems = cartItems.map(item => {
       // item.product có thể là Number ID hoặc Product object (đã populate)
       const productId = typeof item.product === 'number' 
         ? item.product 
@@ -83,7 +170,96 @@ export const orderService = {
 
     // Tính tổng tiền
     const subtotal = orderItems.reduce((total, item) => total + item.totalPrice, 0);
-    const totalAmount = subtotal + shippingFee - cart.discountAmount;
+    
+    // Pre-checkout revalidation: Validate lại voucher trước khi tạo order
+    let discountAmount = 0;
+    let voucherUsageId = null;
+    
+    if (cart.couponCode) {
+      try {
+        // Convert cart items để validate
+        const cartItemsForValidation = orderItems.map(item => ({
+          product: item.product,
+          quantity: item.quantity
+        }));
+
+        // Tìm pending usage hiện có từ cart TRƯỚC (nếu đã apply vào cart)
+        // Nếu có pending usage, không cần validate lại user limit
+        const existingPendingUsage = await VoucherUsage.findOne({
+          user: userId,
+          voucherCode: cart.couponCode.toUpperCase(),
+          status: "pending"
+        });
+
+        // Revalidate voucher với số tiền mới
+        // Nếu đã có pending usage, skip user check (vì đã validate khi apply vào cart)
+        const revalidation = await voucherIntegrationService.preCheckoutRevalidate(
+          cart.couponCode,
+          userId,
+          cartItemsForValidation,
+          subtotal,
+          shippingFee,
+          existingPendingUsage ? true : false // skipUserCheck nếu đã có pending usage
+        );
+
+        if (!revalidation.success) {
+          // Voucher không còn hợp lệ, remove khỏi cart
+          cart.couponCode = undefined;
+          cart.discountAmount = 0;
+          await cart.save();
+          
+          throw new Error(revalidation.message || "Voucher không còn hợp lệ. Vui lòng thử lại.");
+        }
+
+        if (existingPendingUsage) {
+          // Sử dụng pending usage hiện có, không cần lock lại
+          voucherUsageId = existingPendingUsage._id.toString();
+          discountAmount = revalidation.discountAmount;
+          console.log(`[Order] Using existing pending voucher usage. UsageId: ${voucherUsageId}, Code: ${cart.couponCode}`);
+        } else {
+          // Nếu chưa có pending usage, lock voucher mới (trường hợp user apply voucher trực tiếp khi checkout)
+        const lockResult = await voucherIntegrationService.lockVoucherForOrder(
+          cart.couponCode,
+          userId,
+          `TEMP-${Date.now()}` // Temporary ID
+        );
+
+        if (!lockResult.success) {
+          throw new Error(lockResult.message || "Voucher đã hết lượt sử dụng. Vui lòng thử lại.");
+        }
+
+        voucherUsageId = lockResult.usageId;
+        discountAmount = revalidation.discountAmount;
+          console.log(`[Order] Locked new voucher usage. UsageId: ${voucherUsageId}, Code: ${cart.couponCode}`);
+        }
+
+        // Đảm bảo usageId là string
+        if (voucherUsageId && typeof voucherUsageId !== 'string') {
+          voucherUsageId = voucherUsageId.toString();
+        }
+
+        console.log(`[Order] Voucher locked successfully. UsageId: ${voucherUsageId} (type: ${typeof voucherUsageId}), Code: ${cart.couponCode}`);
+
+      } catch (error) {
+        // Nếu có lỗi với voucher, vẫn cho phép tạo order nhưng không dùng voucher
+        console.error(`[Order] Voucher validation/lock error:`, error.message);
+        cart.couponCode = undefined;
+        cart.discountAmount = 0;
+        await cart.save();
+        
+        // Có thể throw error hoặc tiếp tục không dùng voucher
+        // Ở đây tôi sẽ throw để user biết voucher không hợp lệ
+        throw new Error(error.message || "Voucher không hợp lệ. Vui lòng thử lại.");
+      }
+    } else {
+      // Tính lại discountAmount theo tỷ lệ nếu có (fallback cho trường hợp không dùng voucher integration)
+      if (cart.discountAmount && cart.discountAmount > 0 && cart.totalAmount > 0) {
+        const ratio = subtotal / cart.totalAmount;
+        discountAmount = Math.round(cart.discountAmount * ratio);
+      }
+    }
+    
+    const totalAmount = subtotal + shippingFee - discountAmount;
 
     // Tạo orderNumber tự động (đảm bảo unique)
     let orderNumber;
@@ -106,6 +282,55 @@ export const orderService = {
       throw new Error("Không thể tạo orderNumber, vui lòng thử lại");
     }
 
+    // Thu thập thông tin flash sale nếu có
+    let flashSaleInfo = {
+      hasFlashSaleItems: false,
+      flashSaleId: null,
+      reservationIds: []
+    };
+    
+    console.log(`[Order] Checking flash sale info:`, {
+      hasFlashSaleReservationIds: !!flashSaleReservationIds,
+      flashSaleReservationIdsLength: flashSaleReservationIds?.length || 0,
+      reservationMapSize: reservationMap.size
+    });
+    
+    if (flashSaleReservationIds && flashSaleReservationIds.length > 0) {
+      flashSaleInfo.hasFlashSaleItems = true;
+      flashSaleInfo.reservationIds = flashSaleReservationIds;
+      
+      // Lấy flashSaleId từ reservation đầu tiên (tất cả reservations cùng flash sale)
+      if (reservationMap.size > 0) {
+        const firstReservation = Array.from(reservationMap.values())[0];
+        flashSaleInfo.flashSaleId = firstReservation.flash_sale_id;
+        console.log(`[Order] Found flashSaleId from reservationMap:`, flashSaleInfo.flashSaleId);
+      } else {
+        // Nếu reservationMap rỗng, thử lấy từ reservation đầu tiên bằng cách query database
+        console.warn(`[Order] reservationMap is empty but flashSaleReservationIds exists. Trying to get flashSaleId from first reservation...`);
+        try {
+          const firstReservationId = flashSaleReservationIds[0];
+          const firstReservation = await FlashSaleReservation.findById(firstReservationId);
+          if (firstReservation) {
+            flashSaleInfo.flashSaleId = firstReservation.flash_sale_id;
+            console.log(`[Order] Found flashSaleId from reservation:`, flashSaleInfo.flashSaleId);
+          } else {
+            console.warn(`[Order] Could not find reservation ${firstReservationId} in database`);
+          }
+        } catch (error) {
+          console.error(`[Order] Error getting flashSaleId from reservation:`, error);
+        }
+      }
+      
+      console.log(`[Order] Flash sale info created:`, {
+        hasFlashSaleItems: flashSaleInfo.hasFlashSaleItems,
+        flashSaleId: flashSaleInfo.flashSaleId,
+        reservationCount: flashSaleInfo.reservationIds.length,
+        reservationIds: flashSaleInfo.reservationIds
+      });
+    } else {
+      console.log(`[Order] No flash sale reservations. flashSaleInfo will be default (hasFlashSaleItems: false)`);
+    }
+
     // Tạo đơn hàng
     const order = new Order({
       orderNumber, // Tự tạo orderNumber trước khi save
@@ -118,9 +343,10 @@ export const orderService = {
       },
       subtotal,
       shippingFee,
-      discountAmount: cart.discountAmount,
+      discountAmount: discountAmount,
       couponCode: cart.couponCode,
       totalAmount,
+      flashSaleInfo: flashSaleInfo.hasFlashSaleItems ? flashSaleInfo : undefined,
       shippingMethod,
       notes,
       isGift,
@@ -134,9 +360,50 @@ export const orderService = {
 
     await order.save();
 
+    // Xác nhận flash sale reservations nếu có
+    const confirmedReservationIds = []; // Track các reservations đã confirm để rollback nếu cần
+    if (flashSaleReservationIds && Array.isArray(flashSaleReservationIds) && flashSaleReservationIds.length > 0) {
+      console.log(`[Order] Confirming ${flashSaleReservationIds.length} flash sale reservations...`);
+        try {
+        for (const reservationId of flashSaleReservationIds) {
+          console.log(`[Order] Confirming reservation ${reservationId} for order ${order._id}`);
+          const confirmedReservation = await flashSaleReservationService.confirmReservation(reservationId, order._id);
+          confirmedReservationIds.push(reservationId);
+          console.log(`[Order] Successfully confirmed reservation ${reservationId}. Sold updated.`);
+        }
+        console.log(`[Order] All ${flashSaleReservationIds.length} flash sale reservations confirmed successfully.`);
+        } catch (error) {
+        console.error(`[Order] Error confirming reservation:`, error);
+        
+        // Rollback tất cả reservations đã confirm trước đó
+        for (const confirmedId of confirmedReservationIds) {
+          try {
+            console.log(`[Order] Rolling back confirmed reservation ${confirmedId}...`);
+            // Sử dụng rollbackConfirmedReservation cho confirmed reservations
+            await flashSaleReservationService.rollbackConfirmedReservation(confirmedId);
+          } catch (rollbackError) {
+            console.error(`[Order] Error rolling back reservation ${confirmedId}:`, rollbackError);
+          }
+        }
+        
+        // Delete order
+          await Order.deleteOne({ _id: order._id });
+        
+          throw new Error(`Không thể xác nhận flash sale reservation: ${error.message}`);
+        }
+    } else {
+      console.log(`[Order] No flash sale reservations to confirm. flashSaleReservationIds:`, flashSaleReservationIds);
+    }
+
     // Cập nhật tồn kho sản phẩm (chỉ giảm stock, chưa tăng sold)
     // sold sẽ được cập nhật khi đơn hàng chuyển sang trạng thái "delivered"
+    // Lưu ý: Flash sale items đã được xử lý trong confirmReservation (giảm reserved, tăng sold)
     for (let item of orderItems) {
+      // Bỏ qua nếu là flash sale item (đã xử lý trong confirmReservation)
+      if (reservationMap.has(item.product)) {
+        continue;
+      }
+
       await Product.findOneAndUpdate(
         { _id: item.product },
         { 
@@ -147,8 +414,89 @@ export const orderService = {
       );
     }
 
-    // Xóa giỏ hàng sau khi tạo đơn hàng thành công
-    await cartService.clearCart(userId);
+    // Commit voucher usage sau khi order được tạo thành công
+    if (order.couponCode) {
+      if (!voucherUsageId) {
+        console.error(`[Order] Warning: Voucher code ${order.couponCode} was used but voucherUsageId is missing!`);
+      } else {
+        try {
+          console.log(`[Order] Committing voucher usage. UsageId: ${voucherUsageId}, Code: ${order.couponCode}`);
+          
+          const commitResult = await voucherIntegrationService.commitVoucherUsage(voucherUsageId, {
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            discountAmount: order.discountAmount,
+            orderAmount: order.subtotal,
+            finalAmount: order.totalAmount
+          });
+
+          if (!commitResult.success) {
+            // Nếu commit fail, rollback voucher
+            console.error(`[Order] Failed to commit voucher usage, rolling back...`);
+            await voucherIntegrationService.rollbackVoucherUsageByOrder(order._id);
+            throw new Error("Lỗi khi xác nhận voucher. Vui lòng thử lại.");
+          }
+
+          console.log(`[Order] Successfully committed voucher usage for code: ${order.couponCode}, UsageId: ${voucherUsageId}`);
+        } catch (error) {
+          // Nếu commit fail, rollback order, voucher và flash sale reservations
+          console.error(`[Order] Voucher commit error:`, error.message);
+          
+          // Rollback voucher
+          await voucherIntegrationService.rollbackVoucherUsageByOrder(order._id);
+          
+          // Rollback flash sale reservations nếu có
+          if (confirmedReservationIds && confirmedReservationIds.length > 0) {
+            console.log(`[Order] Rolling back ${confirmedReservationIds.length} flash sale reservations...`);
+            for (const reservationId of confirmedReservationIds) {
+              try {
+                // Sử dụng rollbackConfirmedReservation cho confirmed reservations
+                await flashSaleReservationService.rollbackConfirmedReservation(reservationId);
+              } catch (rollbackError) {
+                console.error(`[Order] Error rolling back reservation ${reservationId}:`, rollbackError);
+              }
+            }
+          }
+          
+          // Rollback stock
+          for (let item of orderItems) {
+            // Bỏ qua flash sale items (đã được rollback trong cancelReservation)
+            if (reservationMap.has(item.product)) {
+              continue;
+            }
+            
+            await Product.findOneAndUpdate(
+              { _id: item.product },
+              { $inc: { stock: item.quantity } }
+            );
+          }
+          
+          // Delete order
+          await Order.findByIdAndDelete(order._id);
+          
+          throw new Error(error.message || "Lỗi khi xác nhận voucher. Vui lòng thử lại.");
+        }
+      }
+    }
+
+    // Xóa các items đã được chọn khỏi giỏ hàng sau khi tạo đơn hàng thành công
+    // Nếu có selectedItemIds, chỉ xóa các items đó
+    // Nếu không có (tạo order từ tất cả items), xóa toàn bộ cart
+    if (selectedItemIds && Array.isArray(selectedItemIds) && selectedItemIds.length > 0) {
+      // Xóa từng item đã chọn
+      for (const itemId of selectedItemIds) {
+        try {
+          await cartService.removeFromCart(userId, itemId);
+        } catch (error) {
+          console.error(`[Order] Error removing item ${itemId} from cart:`, error.message);
+          // Tiếp tục xóa các items khác dù có lỗi
+        }
+      }
+      console.log(`[Order] Removed ${selectedItemIds.length} selected items from cart`);
+    } else {
+      // Xóa toàn bộ cart nếu không có selectedItemIds (tương thích với code cũ)
+      await cartService.clearCart(userId);
+    }
 
     // Populate thông tin (chỉ populate user, không populate items.product vì Product dùng Number ID)
     await order.populate([
@@ -341,6 +689,19 @@ export const orderService = {
 
     // Xử lý cập nhật stock và sold khi thay đổi trạng thái
     if (newStatus === "cancelled" || newStatus === "returned") {
+      // Rollback voucher usage nếu có
+      if (order.couponCode) {
+        try {
+          const rollbackResult = await voucherIntegrationService.rollbackVoucherUsageByOrder(order._id);
+          if (rollbackResult.success) {
+            console.log(`[Order] Rolled back voucher usage for order ${order.orderNumber}: ${rollbackResult.message}`);
+          }
+        } catch (error) {
+          // Log lỗi nhưng không throw để không ảnh hưởng đến việc cancel order
+          console.error(`[Order] Failed to rollback voucher usage for order ${order.orderNumber}:`, error.message);
+        }
+      }
+
       // Nếu đơn hàng đã được giao trước đó, cần giảm sold và hoàn lại stock
       if (oldStatus === "delivered") {
         for (let item of order.items) {
@@ -366,6 +727,17 @@ export const orderService = {
               } 
             }
           );
+        }
+      }
+
+      // Hoàn lại voucher nếu order có sử dụng voucher
+      if (order.couponCode) {
+        try {
+          await voucherService.refundVoucher(order.couponCode);
+          console.log(`[Order] Refunded voucher usage count for code: ${order.couponCode}`);
+        } catch (error) {
+          // Log lỗi nhưng không throw để không ảnh hưởng đến việc cập nhật order
+          console.error(`[Order] Failed to refund voucher usage count for code: ${order.couponCode}`, error.message);
         }
       }
     }
@@ -533,20 +905,60 @@ export const orderService = {
 
   // Lấy thống kê đơn hàng
   async getOrderStats(userId = null) {
-    const filter = userId ? { user: userId } : {};
+    // Convert userId sang ObjectId nếu có
+    let filter = {};
+    if (userId) {
+      // userId có thể là string hoặc ObjectId
+      if (typeof userId === 'string') {
+        try {
+          filter.user = new mongoose.Types.ObjectId(userId);
+        } catch (error) {
+          filter.user = userId; // Fallback
+        }
+      } else {
+        filter.user = userId;
+      }
+    }
+
+    // Build aggregation match - cần convert userId sang ObjectId trong aggregation
+    const aggregationMatch = {};
+    if (userId) {
+      // Trong aggregation, cần dùng ObjectId
+      try {
+        const userIdObj = typeof userId === 'string' 
+          ? new mongoose.Types.ObjectId(userId) 
+          : userId;
+        aggregationMatch.user = userIdObj;
+      } catch (error) {
+        aggregationMatch.user = userId;
+      }
+    } else {
+      Object.assign(aggregationMatch, filter); // Nếu không có userId, dùng filter như cũ
+    }
 
     const stats = await Order.aggregate([
-      { $match: filter },
+      { $match: aggregationMatch },
       {
         $group: {
           _id: null,
           totalOrders: { $sum: 1 },
-          totalRevenue: { $sum: "$totalAmount" },
+          totalRevenue: { 
+            $sum: { 
+              $cond: [
+                { $in: ["$status", ["delivered", "shipping", "processing", "confirmed"]] },
+                "$totalAmount",
+                0
+              ]
+            }
+          },
           pendingOrders: {
             $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] }
           },
           confirmedOrders: {
             $sum: { $cond: [{ $eq: ["$status", "confirmed"] }, 1, 0] }
+          },
+          processingOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "processing"] }, 1, 0] }
           },
           shippingOrders: {
             $sum: { $cond: [{ $eq: ["$status", "shipping"] }, 1, 0] }
@@ -556,20 +968,27 @@ export const orderService = {
           },
           cancelledOrders: {
             $sum: { $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0] }
+          },
+          returnedOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "returned"] }, 1, 0] }
           }
         }
       }
     ]);
 
-    return stats[0] || {
+    const result = stats[0] || {
       totalOrders: 0,
       totalRevenue: 0,
       pendingOrders: 0,
       confirmedOrders: 0,
+      processingOrders: 0,
       shippingOrders: 0,
       deliveredOrders: 0,
-      cancelledOrders: 0
+      cancelledOrders: 0,
+      returnedOrders: 0
     };
+
+    return result;
   },
 
   // Hủy đơn hàng

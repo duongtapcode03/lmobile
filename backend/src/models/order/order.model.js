@@ -92,7 +92,7 @@ const shippingAddressSchema = new mongoose.Schema({
 const paymentInfoSchema = new mongoose.Schema({
   method: {
     type: String,
-    enum: ["cod", "bank_transfer", "credit_card", "momo", "zalopay"],
+    enum: ["cod", "bank_transfer", "credit_card", "momo", "zalopay", "vnpay"],
     required: true
   },
   status: {
@@ -221,6 +221,22 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: ["web", "mobile", "admin"],
       default: "web"
+    },
+    
+    // Thông tin flash sale (nếu đơn hàng có sản phẩm flash sale)
+    flashSaleInfo: {
+      flashSaleId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "FlashSale"
+      },
+      reservationIds: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "FlashSaleReservation"
+      }],
+      hasFlashSaleItems: {
+        type: Boolean,
+        default: false
+      }
     }
   },
   { 

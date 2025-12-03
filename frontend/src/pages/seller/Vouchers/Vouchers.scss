@@ -1,0 +1,24 @@
+.seller-vouchers-page {
+  padding: 24px;
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+
+    .page-title {
+      font-size: 28px;
+      font-weight: 600;
+      margin: 0;
+      display: flex;
+      align-items: center;
+    }
+  }
+
+  .ant-card {
+    margin-bottom: 16px;
+  }
+}
+
+

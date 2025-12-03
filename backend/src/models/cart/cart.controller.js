@@ -29,10 +29,10 @@ export const cartController = {
         });
       }
 
-      if (quantity < 1 || quantity > 10) {
+      if (quantity < 1) {
         return res.status(400).json({
           success: false,
-          message: "Số lượng phải từ 1 đến 10"
+          message: "Số lượng phải lớn hơn 0"
         });
       }
 
@@ -150,7 +150,7 @@ export const cartController = {
   // Áp dụng mã giảm giá
   applyCoupon: async (req, res) => {
     try {
-      const { couponCode, discountAmount } = req.body;
+      const { couponCode } = req.body;
 
       if (!couponCode) {
         return res.status(400).json({
@@ -159,19 +159,18 @@ export const cartController = {
         });
       }
 
-      if (!discountAmount || discountAmount < 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Số tiền giảm giá không hợp lệ"
-        });
-      }
-
-      const cart = await cartService.applyCoupon(req.user.id, couponCode, discountAmount);
+      // Cart service sẽ tự validate và tính discountAmount
+      const result = await cartService.applyCoupon(req.user.id, couponCode);
 
       res.json({
         success: true,
-        message: "Áp dụng mã giảm giá thành công",
-        data: cart
+        message: result.message || "Áp dụng mã giảm giá thành công",
+        data: {
+          cart: result.cart,
+          voucher: result.voucher,
+          discountAmount: result.discountAmount,
+          message: result.message
+        }
       });
     } catch (error) {
       res.status(400).json({

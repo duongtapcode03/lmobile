@@ -28,7 +28,7 @@ const { RangePicker } = DatePicker;
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-  const [revenuePeriod, setRevenuePeriod] = useState<'day' | 'month'>('day');
+  const [revenuePeriod, setRevenuePeriod] = useState<'day' | 'week' | 'month'>('day');
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([
     dayjs().subtract(30, 'day'), // 30 ngày trước
     dayjs(), // Hôm nay
@@ -200,13 +200,18 @@ const Dashboard: React.FC = () => {
     ? dashboardStats.recentOrders 
     : [];
 
-  // Chuẩn bị dữ liệu cho biểu đồ doanh thu
+  // Chuẩn bị dữ liệu cho biểu đồ doanh thu (sắp xếp từ cũ đến mới)
   const revenueData = revenuePeriod === 'day' 
-    ? (dashboardStats?.revenueByDay || []).reverse().map(item => ({
+    ? [...(dashboardStats?.revenueByDay || [])].reverse().map(item => ({
         date: item.label || item.date || '',
         revenue: Number(item.total) || 0,
       }))
-    : (dashboardStats?.revenueByMonth || []).reverse().map(item => ({
+    : revenuePeriod === 'week'
+    ? [...(dashboardStats?.revenueByWeek || [])].reverse().map(item => ({
+        date: item.label || item.date || '',
+        revenue: Number(item.total) || 0,
+      }))
+    : [...(dashboardStats?.revenueByMonth || [])].reverse().map(item => ({
         date: `${item._id?.month || ''}/${item._id?.year || ''}`,
         revenue: Number(item.total) || 0,
       }));
@@ -493,6 +498,7 @@ const Dashboard: React.FC = () => {
                     style={{ width: 120 }}
                   >
                     <Select.Option value="day">Theo ngày</Select.Option>
+                    <Select.Option value="week">Theo tuần</Select.Option>
                     <Select.Option value="month">Theo tháng</Select.Option>
                   </Select>
                 </Space>

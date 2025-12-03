@@ -439,6 +439,20 @@ const Orders: React.FC = () => {
               <Descriptions.Item label="Ngày tạo" span={1}>
                 {formatDate(selectedOrder.createdAt)}
               </Descriptions.Item>
+              {selectedOrder.source && (
+                <Descriptions.Item label="Nguồn đơn hàng" span={1}>
+                  <Tag color={
+                    selectedOrder.source === 'web' ? 'blue' :
+                    selectedOrder.source === 'mobile' ? 'purple' :
+                    'orange'
+                  }>
+                    {selectedOrder.source === 'web' ? 'Website' :
+                     selectedOrder.source === 'mobile' ? 'Mobile App' :
+                     selectedOrder.source === 'admin' ? 'Admin' :
+                     selectedOrder.source}
+                  </Tag>
+                </Descriptions.Item>
+              )}
               <Descriptions.Item label="Trạng thái" span={1}>
                 <Tag color={getStatusColor(selectedOrder.status)}>
                   {getStatusLabel(selectedOrder.status)}
@@ -462,8 +476,45 @@ const Orders: React.FC = () => {
                  selectedOrder.shippingMethod}
               </Descriptions.Item>
               {selectedOrder.trackingNumber && (
-                <Descriptions.Item label="Mã vận đơn" span={2}>
+                <Descriptions.Item label="Mã vận đơn" span={1}>
                   <Text strong>{selectedOrder.trackingNumber}</Text>
+                </Descriptions.Item>
+              )}
+              {selectedOrder.estimatedDelivery && (
+                <Descriptions.Item label="Dự kiến giao hàng" span={1}>
+                  {formatDate(selectedOrder.estimatedDelivery)}
+                </Descriptions.Item>
+              )}
+              {selectedOrder.deliveredAt && (
+                <Descriptions.Item label="Ngày giao hàng" span={1}>
+                  {formatDate(selectedOrder.deliveredAt)}
+                </Descriptions.Item>
+              )}
+              {selectedOrder.couponCode && (
+                <Descriptions.Item label="Mã voucher" span={1}>
+                  <Tag color="green" style={{ fontSize: '13px', padding: '2px 8px' }}>
+                    {selectedOrder.couponCode}
+                  </Tag>
+                  {selectedOrder.discountAmount > 0 && (
+                    <Text type="success" style={{ marginLeft: 8, fontSize: '13px' }}>
+                      (Giảm {formatPrice(selectedOrder.discountAmount)})
+                    </Text>
+                  )}
+                </Descriptions.Item>
+              )}
+              {selectedOrder.paymentInfo.transactionId && (
+                <Descriptions.Item label="Mã giao dịch" span={1}>
+                  <Text code>{selectedOrder.paymentInfo.transactionId}</Text>
+                </Descriptions.Item>
+              )}
+              {selectedOrder.paymentInfo.paidAt && (
+                <Descriptions.Item label="Ngày thanh toán" span={1}>
+                  {formatDate(selectedOrder.paymentInfo.paidAt)}
+                </Descriptions.Item>
+              )}
+              {selectedOrder.paymentInfo.refundedAt && (
+                <Descriptions.Item label="Ngày hoàn tiền" span={1}>
+                  {formatDate(selectedOrder.paymentInfo.refundedAt)}
                 </Descriptions.Item>
               )}
             </Descriptions>
@@ -477,13 +528,45 @@ const Orders: React.FC = () => {
                   {selectedOrder.shippingAddress.phone}
                 </Descriptions.Item>
                 {selectedOrder.shippingAddress.email && (
-                  <Descriptions.Item label="Email" span={2}>
+                  <Descriptions.Item label="Email (địa chỉ giao hàng)" span={1}>
                     {selectedOrder.shippingAddress.email}
+                  </Descriptions.Item>
+                )}
+                {(() => {
+                  const user = typeof selectedOrder.user === 'object' ? selectedOrder.user : null;
+                  if (user?.email && user.email !== selectedOrder.shippingAddress.email) {
+                    return (
+                      <Descriptions.Item label="Email (tài khoản)" span={1}>
+                        {user.email}
+                      </Descriptions.Item>
+                    );
+                  }
+                  return null;
+                })()}
+                {(() => {
+                  const user = typeof selectedOrder.user === 'object' ? selectedOrder.user : null;
+                  if (user?.phone && user.phone !== selectedOrder.shippingAddress.phone) {
+                    return (
+                      <Descriptions.Item label="SĐT (tài khoản)" span={1}>
+                        {user.phone}
+                      </Descriptions.Item>
+                    );
+                  }
+                  return null;
+                })()}
+                {selectedOrder.shippingAddress.postalCode && (
+                  <Descriptions.Item label="Mã bưu điện" span={1}>
+                    {selectedOrder.shippingAddress.postalCode}
                   </Descriptions.Item>
                 )}
                 <Descriptions.Item label="Địa chỉ" span={2}>
                   {selectedOrder.shippingAddress.address}, {selectedOrder.shippingAddress.ward}, {selectedOrder.shippingAddress.district}, {selectedOrder.shippingAddress.province}
                 </Descriptions.Item>
+                {selectedOrder.shippingAddress.note && (
+                  <Descriptions.Item label="Ghi chú địa chỉ" span={2}>
+                    <Text type="secondary">{selectedOrder.shippingAddress.note}</Text>
+                  </Descriptions.Item>
+                )}
               </Descriptions>
             </Card>
 
@@ -511,7 +594,11 @@ const Orders: React.FC = () => {
                           <div>{item.productName}</div>
                           {item.variant && (
                             <Text type="secondary" style={{ fontSize: '12px' }}>
-                              {item.variant.storage || item.variant.color || ''}
+                              {[
+                                item.variant.color && `Màu: ${item.variant.color}`,
+                                item.variant.storage && `Bộ nhớ: ${item.variant.storage}`,
+                                item.variant.ram && `RAM: ${item.variant.ram}`
+                              ].filter(Boolean).join(' | ')}
                             </Text>
                           )}
                         </div>
@@ -600,11 +687,42 @@ const Orders: React.FC = () => {
                   })()}
                 </Descriptions.Item>
                 <Descriptions.Item label="Phí vận chuyển">
-                  {formatPrice(selectedOrder.shippingFee)}
+                  <div>
+                    {selectedOrder.shippingFee > 0 ? (
+                      formatPrice(selectedOrder.shippingFee)
+                    ) : (
+                      <Text type="success">Miễn phí</Text>
+                    )}
+                    {selectedOrder.couponCode && selectedOrder.discountAmount === 0 && selectedOrder.shippingFee === 0 && (
+                      <Text type="secondary" style={{ fontSize: '12px', marginLeft: 8 }}>
+                        (Voucher miễn phí vận chuyển)
+                      </Text>
+                    )}
+                  </div>
                 </Descriptions.Item>
-                {selectedOrder.discountAmount > 0 && (
+                {(selectedOrder.discountAmount > 0 || (selectedOrder.couponCode && selectedOrder.discountAmount === 0 && selectedOrder.shippingFee > 0)) && (
                   <Descriptions.Item label="Giảm giá">
-                    <Text type="success">-{formatPrice(selectedOrder.discountAmount)}</Text>
+                    <div>
+                      {selectedOrder.discountAmount > 0 ? (
+                        <Text type="success" strong style={{ fontSize: '16px' }}>
+                          -{formatPrice(selectedOrder.discountAmount)}
+                        </Text>
+                      ) : null}
+                      {selectedOrder.couponCode && (
+                        <div style={{ marginTop: selectedOrder.discountAmount > 0 ? 6 : 0 }}>
+                          <Tag color="green" style={{ fontSize: '12px' }}>
+                            Mã voucher: {selectedOrder.couponCode}
+                          </Tag>
+                        </div>
+                      )}
+                    </div>
+                  </Descriptions.Item>
+                )}
+                {selectedOrder.couponCode && selectedOrder.discountAmount === 0 && selectedOrder.shippingFee === 0 && (
+                  <Descriptions.Item label="Voucher">
+                    <Tag color="green" style={{ fontSize: '13px' }}>
+                      {selectedOrder.couponCode} - Miễn phí vận chuyển
+                    </Tag>
                   </Descriptions.Item>
                 )}
                 <Descriptions.Item label="Tổng cộng">
@@ -661,6 +779,30 @@ const Orders: React.FC = () => {
               </Descriptions>
             </Card>
 
+            {(selectedOrder.notes || selectedOrder.isGift) && (
+              <Card title="Thông tin bổ sung" size="small" style={{ marginTop: 16 }}>
+                <Descriptions column={1} size="small">
+                  {selectedOrder.notes && (
+                    <Descriptions.Item label="Ghi chú đơn hàng">
+                      <Text>{selectedOrder.notes}</Text>
+                    </Descriptions.Item>
+                  )}
+                  {selectedOrder.isGift && (
+                    <>
+                      <Descriptions.Item label="Đơn hàng quà tặng">
+                        <Tag color="pink">Có</Tag>
+                      </Descriptions.Item>
+                      {selectedOrder.giftMessage && (
+                        <Descriptions.Item label="Lời nhắn quà tặng">
+                          <Text italic style={{ fontStyle: 'italic' }}>"{selectedOrder.giftMessage}"</Text>
+                        </Descriptions.Item>
+                      )}
+                    </>
+                  )}
+                </Descriptions>
+              </Card>
+            )}
+
             {selectedOrder.statusHistory && selectedOrder.statusHistory.length > 0 && (
               <Card title="Lịch sử trạng thái" size="small" style={{ marginTop: 16 }}>
                 <Timeline>
@@ -698,5 +840,11 @@ const Orders: React.FC = () => {
 };
 
 export default Orders;
+
+
+
+
+
+
 
 

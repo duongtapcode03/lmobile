@@ -8,16 +8,32 @@ import { axiosClient } from './axiosClient';
 
 export interface FlashSale {
   _id?: string;
-  id: number;
-  session_id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  status: 'active' | 'inactive';
+  description?: string;
+  created_by?: string;
+  actualStatus?: 'scheduled' | 'active' | 'ended' | 'inactive';
+  itemsCount?: number;
+  items?: FlashSaleItem[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FlashSaleItem {
+  _id?: string;
+  flash_sale_id: string;
   product_id: number;
   flash_price: number;
-  total_stock: number;
+  flash_stock: number;
   sold: number;
+  reserved?: number;
   limit_per_user: number;
   sort_order: number;
-  created_at?: string;
-  updated_at?: string;
+  remainingStock?: number;
+  availableStock?: number; // Số lượng còn lại có thể mua (trừ reserved)
+  isAvailable?: boolean;
   product?: {
     _id: number;
     name: string;
@@ -27,6 +43,22 @@ export interface FlashSale {
     slug?: string;
     stock?: number;
   };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FlashSaleReservation {
+  _id?: string;
+  user_id: string;
+  flash_sale_id: string;
+  product_id: number;
+  quantity: number;
+  flash_price: number;
+  expires_at: string;
+  status: 'pending' | 'confirmed' | 'expired' | 'cancelled';
+  order_id?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface FlashSaleListResponse {
@@ -53,8 +85,7 @@ const flashSaleService = {
   getFlashSales: async (params?: {
     page?: number;
     limit?: number;
-    session_id?: string;
-    status?: 'all' | 'available' | 'soldOut';
+    status?: 'all' | 'scheduled' | 'active' | 'ended' | 'inactive';
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }): Promise<FlashSaleListResponse> => {
@@ -70,24 +101,27 @@ const flashSaleService = {
   /**
    * Lấy flash sale theo ID
    */
-  getFlashSaleById: async (id: number | string): Promise<FlashSale> => {
-    const response = await authApi.get(`/flash-sales/${id}`);
+  getFlashSaleById: async (id: string, includeItems: boolean = true): Promise<FlashSale> => {
+    const response = await authApi.get(`/flash-sales/${id}`, {
+      params: { includeItems: includeItems.toString() }
+    });
     return response.data.data;
   },
 
   /**
-   * Lấy flash sales theo session
+   * Lấy danh sách items trong flash sale
    */
-  getFlashSalesBySession: async (
-    sessionId: string,
+  getFlashSaleItems: async (
+    flashSaleId: string,
     params?: {
       page?: number;
       limit?: number;
+      availableOnly?: boolean;
       sortBy?: string;
       sortOrder?: 'asc' | 'desc';
     }
-  ): Promise<FlashSaleListResponse> => {
-    const response = await authApi.get(`/flash-sales/session/${sessionId}`, { params });
+  ): Promise<{ data: FlashSaleItem[]; pagination?: any }> => {
+    const response = await authApi.get(`/flash-sales/${flashSaleId}/items`, { params });
     return {
       data: response.data.data || [],
       pagination: response.data.pagination
@@ -98,15 +132,30 @@ const flashSaleService = {
    * Tạo flash sale mới (Admin)
    */
   createFlashSale: async (flashSaleData: {
-    session_id: string;
-    product_id: number;
-    flash_price: number;
-    total_stock: number;
-    sold?: number;
-    limit_per_user?: number;
-    sort_order?: number;
+    name: string;
+    start_time: string;
+    end_time: string;
+    description?: string;
+    status?: 'active' | 'inactive';
   }): Promise<FlashSale> => {
     const response = await authApi.post('/flash-sales', flashSaleData);
+    return response.data.data;
+  },
+
+  /**
+   * Thêm sản phẩm vào flash sale (Admin)
+   */
+  addProductToFlashSale: async (
+    flashSaleId: string,
+    productData: {
+      product_id: number;
+      flash_price: number;
+      flash_stock: number;
+      limit_per_user?: number;
+      sort_order?: number;
+    }
+  ): Promise<FlashSaleItem> => {
+    const response = await authApi.post(`/flash-sales/${flashSaleId}/products`, productData);
     return response.data.data;
   },
 
@@ -114,7 +163,7 @@ const flashSaleService = {
    * Cập nhật flash sale (Admin)
    */
   updateFlashSale: async (
-    id: number | string,
+    id: string,
     flashSaleData: Partial<FlashSale>
   ): Promise<FlashSale> => {
     const response = await authApi.put(`/flash-sales/${id}`, flashSaleData);
@@ -122,17 +171,54 @@ const flashSaleService = {
   },
 
   /**
+   * Cập nhật flash sale item (Admin)
+   */
+  updateFlashSaleItem: async (
+    itemId: string,
+    itemData: Partial<FlashSaleItem>
+  ): Promise<FlashSaleItem> => {
+    const response = await authApi.put(`/flash-sales/items/${itemId}`, itemData);
+    return response.data.data;
+  },
+
+  /**
+   * Xóa sản phẩm khỏi flash sale (Admin)
+   */
+  removeProductFromFlashSale: async (
+    flashSaleId: string,
+    productId: number
+  ): Promise<void> => {
+    await authApi.delete(`/flash-sales/${flashSaleId}/products`, {
+      data: { productId }
+    });
+  },
+
+  /**
    * Xóa flash sale (Admin)
    */
-  deleteFlashSale: async (id: number | string): Promise<void> => {
+  deleteFlashSale: async (id: string): Promise<void> => {
     await authApi.delete(`/flash-sales/${id}`);
+  },
+
+  /**
+   * Cập nhật trạng thái flash sale (Admin)
+   */
+  updateFlashSaleStatus: async (
+    id: string,
+    status: 'active' | 'inactive'
+  ): Promise<FlashSale> => {
+    const response = await authApi.put(`/flash-sales/${id}/status`, { status });
+    return response.data.data;
   },
 
   /**
    * Lấy thống kê flash sale
    */
-  getStats: async (): Promise<FlashSaleStats> => {
-    const response = await authApi.get('/flash-sales/stats');
+  getStats: async (flashSaleId?: string): Promise<any> => {
+    const url = flashSaleId 
+      ? `/flash-sales/${flashSaleId}/stats`
+      : '/flash-sales/stats/all';
+    const response = await authApi.get(url);
     return response.data.data;
   },
 
@@ -140,7 +226,8 @@ const flashSaleService = {
    * Kiểm tra flash sale availability
    */
   checkAvailability: async (
-    productId: number | string,
+    flashSaleId: string,
+    productId: number,
     quantity?: number
   ): Promise<{
     available: boolean;
@@ -148,9 +235,9 @@ const flashSaleService = {
     flash_price?: number;
     remaining?: number;
     limitPerUser?: number;
-    item?: FlashSale;
+    item?: FlashSaleItem;
   }> => {
-    const response = await authApi.get(`/flash-sales/product/${productId}/check`, {
+    const response = await authApi.get(`/flash-sales/${flashSaleId}/product/${productId}/check`, {
       params: { quantity: quantity || 1 }
     });
     return response.data.data;
@@ -162,7 +249,6 @@ const flashSaleService = {
   getActiveFlashSales: async (params?: {
     page?: number;
     limit?: number;
-    session_id?: string;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
   }): Promise<FlashSaleListResponse> => {
@@ -171,6 +257,57 @@ const flashSaleService = {
       data: response.data.data || [],
       pagination: response.data.pagination
     };
+  },
+
+  /**
+   * Tạo reservation (giữ chỗ) flash sale (User)
+   */
+  createReservation: async (data: {
+    flash_sale_id: string;
+    product_id: number;
+    quantity: number;
+    expiresInMinutes?: number;
+  }): Promise<FlashSaleReservation> => {
+    const response = await authApi.post('/flash-sales/reservations', data);
+    return response.data.data;
+  },
+
+  /**
+   * Xác nhận reservation (User)
+   */
+  confirmReservation: async (reservationId: string, orderId: string): Promise<FlashSaleReservation> => {
+    const response = await authApi.post(`/flash-sales/reservations/${reservationId}/confirm`, { orderId });
+    return response.data.data;
+  },
+
+  /**
+   * Hủy reservation (User)
+   */
+  cancelReservation: async (reservationId: string): Promise<void> => {
+    await authApi.delete(`/flash-sales/reservations/${reservationId}`);
+  },
+
+  /**
+   * Lấy reservations của user
+   */
+  getUserReservations: async (flashSaleId?: string): Promise<FlashSaleReservation[]> => {
+    const params = flashSaleId ? { flash_sale_id: flashSaleId } : {};
+    const response = await authApi.get('/flash-sales/reservations', { params });
+    return response.data.data || [];
+  },
+
+  /**
+   * Validate reservation (re-check trước khi thanh toán)
+   */
+  validateReservation: async (reservationId: string): Promise<{
+    valid: boolean;
+    reason?: string;
+    reservation?: FlashSaleReservation;
+    flash_price?: number;
+    availableStock?: number;
+  }> => {
+    const response = await authApi.get(`/flash-sales/reservations/${reservationId}/validate`);
+    return response.data.data;
   }
 };
 
