@@ -1,6 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER } from 'redux-persist';
-import { persistStore, persistReducer, authPersistConfig } from './persist';
+import { persistStore, persistReducer, authPersistConfig, filterPersistConfig } from './persist';
 import languageReducer from '../features/language/languageSlice';
 import authReducer from '../features/auth/authSlice';
 import filterReducer from '../features/filter/filterSlice';
@@ -12,13 +12,14 @@ const tempReducer = (state = {}) => {
 };
 
 const persistedAuthReducer = persistReducer(authPersistConfig, authReducer);
+const persistedFilterReducer = persistReducer(filterPersistConfig, filterReducer);
 
 export const store = configureStore({
   reducer: {
     temp: tempReducer,
     language: languageReducer,
     auth: persistedAuthReducer,
-    filter: filterReducer,
+    filter: persistedFilterReducer,
     cart: cartReducer,
   },
   middleware: (getDefaultMiddleware) =>

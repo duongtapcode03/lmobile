@@ -12,5 +12,11 @@ export const authPersistConfig = {
   whitelist: ['user', 'token', 'refreshToken', 'role', 'isAuthenticated', 'isLogin', 'rememberMe'],
 };
 
+// Persistent config for filter (giống như auth, hoạt động cả khi chưa đăng nhập)
+export const filterPersistConfig = {
+  key: 'filter',
+  storage: storage, // Lưu vào localStorage['persist:filter']
+};
+
 export { persistStore, persistReducer };
 

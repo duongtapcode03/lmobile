@@ -97,6 +97,9 @@ const LoginPage = () => {
         rememberMe: values.remember || false,
       }));
       
+      // Dispatch event để Header component biết đã đăng nhập và load cart/wishlist
+      window.dispatchEvent(new Event('userLoggedIn'));
+      
       message.success('Đăng nhập thành công!');
       
       // Redirect based on user role

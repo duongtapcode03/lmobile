@@ -23,6 +23,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { persistor } from '../../store';
 import { logout } from '../../features/auth/authSlice';
+import { resetCart } from '../../features/cart/cartSlice';
 import { authService } from '../../api/authService';
 import { useToast } from '../../contexts/ToastContext';
 import type { RootState } from '../../store';
@@ -119,6 +120,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       console.error('Logout API call failed:', error);
     } finally {
       dispatch(logout());
+      dispatch(resetCart());
       try {
         await persistor.purge();
       } catch (purgeError) {

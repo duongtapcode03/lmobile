@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { logout } from '../../features/auth/authSlice';
-import { fetchCart } from '../../features/cart/cartSlice';
+import { fetchCart, resetCart } from '../../features/cart/cartSlice';
 import { authService } from '../../api/authService';
 import { userService } from '../../api/userService';
 import phoneService from '../../api/phoneService';
@@ -38,12 +38,17 @@ const Header: React.FC = () => {
   // Get token from Redux state
   const token = useSelector((state) => state?.auth?.token);
 
-  // Load wishlist count
-  const loadWishlistCount = React.useCallback(async () => {
+  // Load wishlist count với retry logic
+  const loadWishlistCount = React.useCallback(async (retryCount = 0) => {
     // Check Redux state only
     if (!isAuthenticated || !token) {
       setWishlistCount(0);
       return;
+    }
+
+    // Thêm delay nhỏ để đảm bảo token đã được set trong axios interceptor
+    if (retryCount === 0) {
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     try {
@@ -52,6 +57,11 @@ const Header: React.FC = () => {
       const count = wishlist?.pagination?.totalItems || wishlist?.items?.length || 0;
       setWishlistCount(count);
     } catch (error: any) {
+      // Retry một lần nếu lỗi do token chưa sẵn sàng
+      if (retryCount < 1 && (error.code === 'NO_TOKEN' || error.response?.status === 401)) {
+        setTimeout(() => loadWishlistCount(retryCount + 1), 500);
+        return;
+      }
       // Silent fail - user might not have wishlist yet
       // Don't log 401 errors as they're handled by axiosClient
       if (error.response?.status !== 401 && error.code !== 'NO_TOKEN') {
@@ -64,6 +74,7 @@ const Header: React.FC = () => {
   useEffect(() => {
     loadWishlistCount();
   }, [loadWishlistCount]);
+
 
   // Listen to wishlist update events
   useEffect(() => {
@@ -79,25 +90,62 @@ const Header: React.FC = () => {
     };
   }, [loadWishlistCount]);
 
-  // Load cart count
+  // Reset cart khi đăng xuất
   useEffect(() => {
-    const loadCart = async () => {
-      if (!isAuthenticated || !token) {
+    if (!isAuthenticated || !token) {
+      // Nếu không đăng nhập, reset cart state
+      dispatch(resetCart());
+    }
+  }, [isAuthenticated, token, dispatch]);
+
+  // Load cart count với retry logic
+  const loadCart = React.useCallback(async (retryCount = 0) => {
+    if (!isAuthenticated || !token) {
+      return;
+    }
+
+    // Thêm delay nhỏ để đảm bảo token đã được set trong axios interceptor
+    if (retryCount === 0) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    try {
+      await dispatch(fetchCart());
+    } catch (error: any) {
+      // Retry một lần nếu lỗi do token chưa sẵn sàng
+      if (retryCount < 1 && (error.code === 'NO_TOKEN' || error.response?.status === 401)) {
+        setTimeout(() => loadCart(retryCount + 1), 500);
         return;
       }
+      // Silent fail - cart might not exist yet
+      if (error.response?.status !== 401 && error.code !== 'NO_TOKEN') {
+        console.debug('Could not load cart:', error);
+      }
+    }
+  }, [isAuthenticated, token, dispatch]);
 
-      try {
-        await dispatch(fetchCart());
-      } catch (error: any) {
-        // Silent fail - cart might not exist yet
-        if (error.response?.status !== 401 && error.code !== 'NO_TOKEN') {
-          console.debug('Could not load cart:', error);
-        }
+  useEffect(() => {
+    loadCart();
+  }, [loadCart]);
+
+  // Listen to login event để reload cart và wishlist sau khi đăng nhập
+  useEffect(() => {
+    const handleLogin = () => {
+      // Reload cart và wishlist khi đăng nhập thành công
+      if (isAuthenticated && token) {
+        setTimeout(() => {
+          loadCart();
+          loadWishlistCount();
+        }, 300);
       }
     };
 
-    loadCart();
-  }, [isAuthenticated, token, dispatch]);
+    window.addEventListener('userLoggedIn', handleLogin);
+    
+    return () => {
+      window.removeEventListener('userLoggedIn', handleLogin);
+    };
+  }, [isAuthenticated, token, loadCart, loadWishlistCount]);
 
   // Handle search với debounce
   const handleSearch = useCallback(async (value: string) => {
@@ -242,6 +290,9 @@ const Header: React.FC = () => {
       } finally {
         // Dispatch logout action to clear Redux state
         dispatch(logout());
+        
+        // Reset cart state khi đăng xuất
+        dispatch(resetCart());
         
         // Purge Redux Persist to completely clear persist:auth
         try {
@@ -392,7 +443,7 @@ const Header: React.FC = () => {
 
               {/* Cart */}
               <div className="cart">
-                <Badge count={cartTotalItems} showZero={false}>
+                <Badge count={isAuthenticated ? cartTotalItems : 0} showZero={false}>
                   <Button 
                     type="text" 
                     icon={<ShoppingCartOutlined />} 
