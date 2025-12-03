@@ -52,6 +52,31 @@ const Vouchers: React.FC = () => {
     loadVouchers();
   }, [activeTab]);
 
+  // Reset voucher state khi đăng xuất
+  useEffect(() => {
+    if (!isAuthenticated || !token) {
+      setAvailableVouchers([]);
+      setSavedVouchers([]);
+      setSelectedVoucher(null);
+      setDetailModalVisible(false);
+    }
+  }, [isAuthenticated, token]);
+
+  // Listen to logout event để reset voucher state
+  useEffect(() => {
+    const handleLogout = () => {
+      setAvailableVouchers([]);
+      setSavedVouchers([]);
+      setSelectedVoucher(null);
+      setDetailModalVisible(false);
+    };
+
+    window.addEventListener('userLoggedOut', handleLogout);
+    return () => {
+      window.removeEventListener('userLoggedOut', handleLogout);
+    };
+  }, []);
+
   const loadVouchers = async () => {
     try {
       setLoading(true);

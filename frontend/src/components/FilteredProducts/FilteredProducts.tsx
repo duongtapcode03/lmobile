@@ -12,11 +12,11 @@ import ProductCard from '../ProductCard';
 import './FilteredProducts.scss';
 
 interface FilteredProductsProps {
-  filters?: any; // FilterState from parent
+  filters?: any; // FilterState from parent (deprecated, use Redux instead)
   searchQuery?: string;
   sortBy?: string;
   featured?: boolean | string;
-  productType?: 'featured' | 'new' | 'bestSeller'; // API mới: type từ URL
+  productType?: 'featured' | 'new' | 'bestSeller'; // Deprecated: lấy từ Redux filters.productType
   onAddToCart?: (productId: string) => void;
   onAddToWishlist?: (productId: string) => void;
 }
@@ -38,6 +38,10 @@ const FilteredProducts: React.FC<FilteredProductsProps> = ({
   console.log('🔴 FilteredProducts - Redux filters:', reduxFilters);
   console.log('🔴 FilteredProducts - Props filters (ignored):', propsFilters);
   
+  // Lấy productType từ Redux filters, fallback về props nếu không có trong Redux
+  const productTypeFromRedux = filters.productType;
+  const finalProductType = productTypeFromRedux || productType;
+  
   const {
     products,
     loading,
@@ -53,7 +57,7 @@ const FilteredProducts: React.FC<FilteredProductsProps> = ({
     searchQuery,
     sortBy,
     featured,
-    productType,
+    productType: finalProductType,
     limit: 12,
     debounceMs: 500,
   });

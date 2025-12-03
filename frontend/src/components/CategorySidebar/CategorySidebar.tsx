@@ -19,6 +19,7 @@ export interface FilterState {
   category?: number | string; // Category ID (number or string for backward compatibility)
   brands: (number | string)[]; // Brand IDs (numbers or strings for backward compatibility)
   priceRange: [number, number];
+  productType?: 'featured' | 'new' | 'bestSeller'; // Product type filter
 }
 
 
@@ -30,6 +31,7 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const selectedCategoryId = useSelector((state: RootState) => state.filter.selectedCategoryId);
+  const currentFilters = useSelector((state: RootState) => state.filter.filters); // Lấy filters hiện tại từ Redux
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [selectedBrands, setSelectedBrands] = useState<(number | string)[]>([]);
@@ -91,12 +93,37 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
       setPriceMin(range[0].toString());
       setPriceMax(range[1].toString());
       
+      // Chỉ reset productType nếu không phải 'featured' (vì 'featured' có thể combine với price qua /products API)
+      const shouldResetProductType = currentFilters.productType && 
+        currentFilters.productType !== 'featured';
+      
       // Dispatch ngay lập tức khi price range thay đổi
-      dispatch(setFilters({
+      const filters = {
         category: selectedCategoryId || undefined,
         brands: selectedBrands,
         priceRange: range,
-      }));
+        productType: shouldResetProductType ? undefined : currentFilters.productType,
+      };
+      dispatch(setFilters(filters));
+      
+      // Update URL params
+      const params = new URLSearchParams();
+      if (filters.category) {
+        params.set('category', String(filters.category));
+      }
+      if (filters.brands && filters.brands.length > 0) {
+        params.set('brand', filters.brands.join(','));
+      }
+      if (range[0] > 0) {
+        params.set('minPrice', String(range[0]));
+      }
+      if (range[1] < 50000000) {
+        params.set('maxPrice', String(range[1]));
+      }
+      if (filters.productType) {
+        params.set('type', filters.productType);
+      }
+      navigate(`/products?${params.toString()}`, { replace: true });
     }
   };
 
@@ -108,11 +135,33 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
     setPriceRange(range);
     
     // Dispatch khi user nhập giá vào input
-    dispatch(setFilters({
+    // Chỉ reset productType nếu không phải 'featured' (vì 'featured' có thể combine với price qua /products API)
+    const shouldResetProductType = currentFilters.productType && 
+      currentFilters.productType !== 'featured';
+    
+    const filters = {
       category: selectedCategoryId || undefined,
       brands: selectedBrands,
       priceRange: range,
-    }));
+      productType: shouldResetProductType ? undefined : currentFilters.productType,
+    };
+    dispatch(setFilters(filters));
+    
+    // Update URL params
+    const params = new URLSearchParams();
+    if (filters.category) {
+      params.set('category', String(filters.category));
+    }
+    if (filters.brands && filters.brands.length > 0) {
+      params.set('brand', filters.brands.join(','));
+    }
+    if (range[0] > 0) {
+      params.set('minPrice', String(range[0]));
+    }
+    if (range[1] < 50000000) {
+      params.set('maxPrice', String(range[1]));
+    }
+    navigate(`/products?${params.toString()}`, { replace: true });
   };
 
 
@@ -140,14 +189,23 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
     // 3 item đầu tiên: chỉ update state, không navigate
     if (index < 3) {
       // Dispatch action để lưu categoryId vào Redux
-      dispatch(setFilters({
+      // Giữ lại productType từ Redux hiện tại (nếu có) vì category API có thể dùng với productType
+      const filters: FilterState = {
         category: category._id,
         brands: [],
-        priceRange: [0, 50000000]
-      }));
+        priceRange: [0, 50000000] as [number, number],
+        productType: currentFilters.productType, // Giữ lại productType nếu có
+      };
+      dispatch(setFilters(filters));
       
-      // Navigate đến trang products (không có params, chỉ dùng state)
-      navigate('/products');
+      // Navigate với URL params để dễ nhìn
+      const params = new URLSearchParams();
+      params.set('category', String(category._id));
+      // Giữ lại productType trong URL nếu có
+      if (filters.productType) {
+        params.set('type', filters.productType);
+      }
+      navigate(`/products?${params.toString()}`);
     } else {
       // Các item khác: navigate như bình thường
       if (category.slug) {
@@ -246,16 +304,41 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
                           setSelectedBrands(newSelectedBrands);
                           
                           // Dispatch to Redux
+                          // Chỉ reset productType nếu không phải 'featured' (vì 'featured' có thể combine với brand qua /products API)
+                          // 'new' và 'bestSeller' không thể combine với brand/price
+                          const shouldResetProductType = currentFilters.productType && 
+                            currentFilters.productType !== 'featured';
+                          
                           const newFilters = {
                             category: selectedCategoryId || undefined,
                             brands: newSelectedBrands,
                             priceRange: priceRange,
+                            productType: shouldResetProductType ? undefined : currentFilters.productType,
                           };
                           console.log('🔵 CategorySidebar - Toggle brand, dispatching filters:', newFilters);
                           dispatch(setFilters(newFilters));
                           
-                          // Navigate to products page (không có params, chỉ dùng state)
-                          navigate('/products');
+                          // Navigate với URL params để dễ nhìn
+                          const params = new URLSearchParams();
+                          if (newFilters.category) {
+                            params.set('category', String(newFilters.category));
+                          }
+                          if (newFilters.brands && newFilters.brands.length > 0) {
+                            params.set('brand', newFilters.brands.join(','));
+                          }
+                          if (newFilters.priceRange && (newFilters.priceRange[0] > 0 || newFilters.priceRange[1] < 50000000)) {
+                            if (newFilters.priceRange[0] > 0) {
+                              params.set('minPrice', String(newFilters.priceRange[0]));
+                            }
+                            if (newFilters.priceRange[1] < 50000000) {
+                              params.set('maxPrice', String(newFilters.priceRange[1]));
+                            }
+                          }
+                          // Thêm productType vào URL nếu có (ví dụ: 'featured' có thể combine với brand)
+                          if (newFilters.productType) {
+                            params.set('type', newFilters.productType);
+                          }
+                          navigate(`/products?${params.toString()}`);
                         }
                       }}
                     >

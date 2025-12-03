@@ -145,6 +145,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     } finally {
       dispatch(logout());
       dispatch(resetCart());
+      
+      // Dispatch event để các component khác (voucher, wishlist, etc.) có thể reset state
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('userLoggedOut'));
+      }
+      
       try {
         await persistor.purge();
       } catch (purgeError) {

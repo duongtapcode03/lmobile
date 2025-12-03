@@ -41,8 +41,23 @@ const VoucherSection: React.FC<VoucherSectionProps> = ({ limit = 6 }) => {
     loadVouchers();
     if (isAuthenticated) {
       loadSavedVouchers();
+    } else {
+      // Reset saved vouchers khi đăng xuất
+      setSavedVouchers([]);
     }
   }, [isAuthenticated]);
+
+  // Listen to logout event để reset voucher state
+  useEffect(() => {
+    const handleLogout = () => {
+      setSavedVouchers([]);
+    };
+
+    window.addEventListener('userLoggedOut', handleLogout);
+    return () => {
+      window.removeEventListener('userLoggedOut', handleLogout);
+    };
+  }, []);
 
   const loadVouchers = async () => {
     try {

@@ -1,9 +1,12 @@
 import React from 'react';
 import { Row, Col, Typography, Button } from 'antd';
 import { RightOutlined } from '@ant-design/icons';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import ProductCard from '../ProductCard';
+import { setFilters } from '../../features/filter/filterSlice';
 import type { PhoneDetail } from '../../types';
+import type { FilterState } from '../CategorySidebar';
 import './ProductSection.scss';
 
 const { Title } = Typography;
@@ -27,6 +30,37 @@ const ProductSection: React.FC<ProductSectionProps> = ({
   onAddToCart,
   onAddToWishlist,
 }) => {
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+
+  const handleViewAll = () => {
+    if (!viewAllLink) return;
+
+    // Parse productType từ URL (ví dụ: /products?type=featured)
+    const url = new URL(viewAllLink, window.location.origin);
+    const typeParam = url.searchParams.get('type') as 'featured' | 'new' | 'bestSeller' | null;
+    
+    // Set filter vào Redux
+    const filters: FilterState = {
+      category: undefined,
+      brands: [],
+      priceRange: [0, 50000000],
+      productType: typeParam && ['featured', 'new', 'bestSeller'].includes(typeParam) 
+        ? typeParam 
+        : undefined,
+    };
+    
+    dispatch(setFilters(filters));
+    
+    // Navigate với URL params để dễ nhìn và share
+    const params = new URLSearchParams();
+    if (filters.productType) {
+      params.set('type', filters.productType);
+    }
+    
+    navigate(`/products?${params.toString()}`);
+  };
+
   if (products.length === 0) {
     return null;
   }
@@ -38,16 +72,15 @@ const ProductSection: React.FC<ProductSectionProps> = ({
           {title}
         </Title>
         {viewAllLink && (
-          <Link to={viewAllLink} className="view-all-link">
-            <Button
-              type="primary"
-              size="large"
-              icon={<RightOutlined />}
-              className="view-all-button"
-            >
-              Xem tất cả
-            </Button>
-          </Link>
+          <Button
+            type="primary"
+            size="large"
+            icon={<RightOutlined />}
+            className="view-all-button"
+            onClick={handleViewAll}
+          >
+            Xem tất cả
+          </Button>
         )}
       </div>
       <Row gutter={[16, 16]}>

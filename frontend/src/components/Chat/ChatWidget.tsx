@@ -156,7 +156,7 @@ const ChatWidget: React.FC = () => {
   // Count unread messages (chỉ đếm khi đã đăng nhập)
   const unreadCount = isAuthenticated 
     ? conversations.reduce((total, conv) => {
-        return total + (conv.unreadCount?.user || 0);
+    return total + (conv.unreadCount?.user || 0);
       }, 0)
     : 0;
 

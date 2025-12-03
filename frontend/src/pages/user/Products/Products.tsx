@@ -20,6 +20,56 @@ import './Products.scss';
 const { Option } = Select;
 const { Search } = Input;
 
+// Helper function: Convert FilterState to URL params
+const filtersToParams = (filters: FilterState): URLSearchParams => {
+  const params = new URLSearchParams();
+  
+  if (filters.category) {
+    params.set('category', String(filters.category));
+  }
+  
+  if (filters.brands && filters.brands.length > 0) {
+    params.set('brand', filters.brands.join(','));
+  }
+  
+  if (filters.priceRange) {
+    const [min, max] = filters.priceRange;
+    if (min > 0) {
+      params.set('minPrice', String(min));
+    }
+    if (max < 50000000) {
+      params.set('maxPrice', String(max));
+    }
+  }
+  
+  if (filters.productType) {
+    params.set('type', filters.productType);
+  }
+  
+  return params;
+};
+
+// Helper function: Convert URL params to FilterState
+const paramsToFilters = (searchParams: URLSearchParams): Partial<FilterState> => {
+  const categoryParam = searchParams.get('category');
+  const brandParam = searchParams.get('brand');
+  const minPriceParam = searchParams.get('minPrice');
+  const maxPriceParam = searchParams.get('maxPrice');
+  const typeParam = searchParams.get('type') as 'featured' | 'new' | 'bestSeller' | null;
+  
+  return {
+    category: categoryParam || undefined,
+    brands: brandParam ? brandParam.split(',') : [],
+    priceRange: [
+      minPriceParam ? parseInt(minPriceParam) : 0,
+      maxPriceParam ? parseInt(maxPriceParam) : 50000000,
+    ],
+    productType: typeParam && ['featured', 'new', 'bestSeller'].includes(typeParam) 
+      ? typeParam 
+      : undefined,
+  };
+};
+
 // Sort options
 const SORT_OPTIONS = [
   { value: 'default', label: 'Mặc định' },
@@ -75,28 +125,23 @@ const ProductsPage: React.FC = () => {
   
   // Chỉ load filters từ URL params khi mount lần đầu (khi navigate từ bên ngoài)
   useEffect(() => {
-    const categoryParam = searchParams.get('category');
-    const brandParam = searchParams.get('brand');
-    const minPriceParam = searchParams.get('minPrice');
-    const maxPriceParam = searchParams.get('maxPrice');
     const searchParam = searchParams.get('search');
     const sortParam = searchParams.get('sort');
-    const typeParam = searchParams.get('type') as 'featured' | 'new' | 'bestSeller' | null;
+    
     // Load filters từ URL chỉ khi mount (isInitialLoad = true)
     if (isInitialLoad) {
+      const urlFilters = paramsToFilters(searchParams);
       const newFilters: FilterState = {
-        category: categoryParam || undefined,
-        brands: brandParam ? brandParam.split(',') : [],
-        priceRange: [
-          minPriceParam ? parseInt(minPriceParam) : 0,
-          maxPriceParam ? parseInt(maxPriceParam) : 50000000,
-        ],
+        category: urlFilters.category,
+        brands: urlFilters.brands || [],
+        priceRange: urlFilters.priceRange || [0, 50000000],
+        productType: urlFilters.productType,
       };
       
       setFilters(newFilters);
       dispatch(setReduxFilters(newFilters));
       
-      // Load search, sort, type từ URL
+      // Load search, sort từ URL
       if (searchParam) {
         setSearchQuery(searchParam);
         setSearchInput(searchParam);
@@ -106,13 +151,40 @@ const ProductsPage: React.FC = () => {
         setSortBy(sortParam);
       }
       
-      if (typeParam && ['featured', 'new', 'bestSeller'].includes(typeParam)) {
-        setProductType(typeParam);
+      // Set productType từ filters (đã lưu vào Redux)
+      if (newFilters.productType) {
+        setProductType(newFilters.productType);
       }
       
       setIsInitialLoad(false);
     }
-  }, [isInitialLoad]); // Chỉ chạy khi isInitialLoad thay đổi (từ true -> false)
+  }, [isInitialLoad, searchParams, dispatch]); // Chỉ chạy khi isInitialLoad thay đổi (từ true -> false)
+  
+  // Sync Redux filters to URL params (khi Redux thay đổi, update URL)
+  useEffect(() => {
+    if (!isInitialLoad) {
+      const params = filtersToParams(reduxFilters);
+      
+      // Giữ lại search và sort params
+      const searchParam = searchParams.get('search');
+      const sortParam = searchParams.get('sort');
+      
+      if (searchParam) {
+        params.set('search', searchParam);
+      }
+      if (sortParam) {
+        params.set('sort', sortParam);
+      }
+      
+      // Update URL params
+      const newParamsString = params.toString();
+      const currentParamsString = searchParams.toString();
+      
+      if (newParamsString !== currentParamsString) {
+        setSearchParams(params, { replace: true });
+      }
+    }
+  }, [reduxFilters, isInitialLoad, searchParams, setSearchParams]);
   
   // Sync Redux filters to local state (chỉ khi không phải initial load)
   // Note: Không nên sync từ Redux về local state vì có thể gây conflict với URL params
@@ -213,6 +285,7 @@ const ProductsPage: React.FC = () => {
       category: undefined,
       brands: [],
       priceRange: [0, 50000000],
+      productType: undefined,
     };
     setFilters(defaultFilters);
     dispatch(setReduxFilters(defaultFilters));

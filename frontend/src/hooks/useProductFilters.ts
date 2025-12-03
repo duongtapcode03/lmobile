@@ -44,11 +44,12 @@ export const useProductFilters = (
       category: undefined,
       brands: [],
       priceRange: [0, 50000000],
+      productType: undefined,
     },
     searchQuery = '',
     sortBy = 'default',
     featured,
-    productType,
+    productType: productTypeProp,
     page: initialPage = 1,
     limit: initialLimit = 12,
     debounceMs = 500,
@@ -56,6 +57,9 @@ export const useProductFilters = (
   } = options;
 
   const [filters, setFilters] = useState<FilterState>(initialFilters);
+  
+  // Lấy productType từ filters (Redux) hoặc từ props (backward compatibility)
+  const productType = filters.productType || productTypeProp;
   const [products, setProducts] = useState<PhoneDetail[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +121,16 @@ export const useProductFilters = (
         }
       }
       
+      // Kiểm tra có brand hoặc price filter không
+      const hasBrandOrPriceFilter = 
+        (filters.brands && filters.brands.length > 0) ||
+        (filters.priceRange && (filters.priceRange[0] > 0 || filters.priceRange[1] < 50000000));
+
+      // Kiểm tra productType có thể combine với brand/price không
+      // Chỉ 'featured' có thể combine với brand/price qua API /products với featured=true
+      // 'new' và 'bestSeller' không thể combine (phải dùng API /products/by-type/:type)
+      const canCombineProductType = productType === 'featured' && hasBrandOrPriceFilter;
+
       const phoneFilter: PhoneFilter = {
         page,
         limit,
@@ -125,7 +139,9 @@ export const useProductFilters = (
         // Sort
         ...(mappedSortBy && { sortBy: mappedSortBy }),
         ...(sortOrder && { sortOrder }),
-        // Featured
+        // Featured - chỉ thêm nếu productType='featured' và có thể combine
+        ...(canCombineProductType ? { featured: true } : {}),
+        // Featured từ props (backward compatibility)
         ...(featured === true || featured === 'true' ? { featured: true } : {}),
         // Category
         ...(filters.category && { category: filters.category }),
@@ -141,16 +157,16 @@ export const useProductFilters = (
       
       console.log('🟡 useProductFilters - Current filters state:', filters);
       console.log('🟡 useProductFilters - PhoneFilter to API:', phoneFilter);
+      console.log('🟡 useProductFilters - productType:', productType, 'canCombine:', canCombineProductType);
 
       let response: PhoneListResponse;
 
-      // Nếu có brand filter hoặc price filter, không dùng productType API (vì productType API không hỗ trợ filter)
-      const hasBrandOrPriceFilter = 
-        (filters.brands && filters.brands.length > 0) ||
-        (filters.priceRange && (filters.priceRange[0] > 0 || filters.priceRange[1] < 50000000));
-
-      // Đơn giản hóa: Nếu có productType và KHÔNG có brand/price filter, dùng API getPhonesByType
-      if (productType && ['featured', 'new', 'bestSeller'].includes(productType) && !hasBrandOrPriceFilter) {
+      // Nếu có productType='featured' và có brand/price filter → dùng /products với featured=true
+      if (canCombineProductType) {
+        response = await phoneService.getPhones(phoneFilter);
+      }
+      // Nếu có productType và KHÔNG có brand/price filter → dùng API getPhonesByType
+      else if (productType && ['featured', 'new', 'bestSeller'].includes(productType) && !hasBrandOrPriceFilter) {
         response = await phoneService.getPhonesByType(productType, {
           page,
           limit,
@@ -158,7 +174,7 @@ export const useProductFilters = (
           ...(sortOrder && { sortOrder }),
         });
       }
-      // Nếu có category, luôn dùng API category với tất cả filters
+      // Nếu có category, luôn dùng API category với tất cả filters (không hỗ trợ productType)
       else if (filters.category) {
         const categoryId = typeof filters.category === 'number' 
           ? filters.category 

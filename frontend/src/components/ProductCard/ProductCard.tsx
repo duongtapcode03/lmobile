@@ -146,7 +146,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
   const hasDiscount = product.hasDiscount || 
     (product.discount && 
-     (typeof product.discount === 'string'
+     (typeof product.discount === 'string' 
        ? product.discount !== '0' && (product.discount as string).trim() !== ''
        : product.discount !== 0));
 

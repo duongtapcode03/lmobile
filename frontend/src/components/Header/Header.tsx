@@ -100,28 +100,28 @@ const Header: React.FC = () => {
 
   // Load cart count với retry logic
   const loadCart = React.useCallback(async (retryCount = 0) => {
-    if (!isAuthenticated || !token) {
-      return;
-    }
+      if (!isAuthenticated || !token) {
+        return;
+      }
 
     // Thêm delay nhỏ để đảm bảo token đã được set trong axios interceptor
     if (retryCount === 0) {
       await new Promise(resolve => setTimeout(resolve, 200));
     }
 
-    try {
-      await dispatch(fetchCart());
-    } catch (error: any) {
+      try {
+        await dispatch(fetchCart());
+      } catch (error: any) {
       // Retry một lần nếu lỗi do token chưa sẵn sàng
       if (retryCount < 1 && (error.code === 'NO_TOKEN' || error.response?.status === 401)) {
         setTimeout(() => loadCart(retryCount + 1), 500);
         return;
       }
-      // Silent fail - cart might not exist yet
-      if (error.response?.status !== 401 && error.code !== 'NO_TOKEN') {
-        console.debug('Could not load cart:', error);
+        // Silent fail - cart might not exist yet
+        if (error.response?.status !== 401 && error.code !== 'NO_TOKEN') {
+          console.debug('Could not load cart:', error);
+        }
       }
-    }
   }, [isAuthenticated, token, dispatch]);
 
   useEffect(() => {
@@ -293,6 +293,11 @@ const Header: React.FC = () => {
         
         // Reset cart state khi đăng xuất
         dispatch(resetCart());
+        
+        // Dispatch event để các component khác (voucher, wishlist, etc.) có thể reset state
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('userLoggedOut'));
+        }
         
         // Purge Redux Persist to completely clear persist:auth
         try {
@@ -467,9 +472,9 @@ const Header: React.FC = () => {
                       navigate('/cart');
                     }}
                   >
-                    {t('common.cart')}
-                  </Button>
-                </Badge>
+                      {t('common.cart')}
+                    </Button>
+                  </Badge>
               </div>
 
               {/* User menu */}

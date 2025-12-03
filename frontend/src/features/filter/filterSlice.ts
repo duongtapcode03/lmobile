@@ -5,6 +5,7 @@ export interface FilterState {
   category?: number | string; // Category ID (number or string for backward compatibility)
   brands: (number | string)[]; // Brand IDs (numbers or strings for backward compatibility)
   priceRange: [number, number];
+  productType?: 'featured' | 'new' | 'bestSeller'; // Product type filter
 }
 
 interface FilterSliceState {
@@ -17,6 +18,7 @@ const initialState: FilterSliceState = {
     category: undefined,
     brands: [],
     priceRange: [0, 50000000],
+    productType: undefined,
   },
   selectedCategoryId: null,
 };
