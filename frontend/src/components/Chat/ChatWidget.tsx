@@ -50,26 +50,43 @@ const ChatWidget: React.FC = () => {
     }
   }, [messages]);
 
+  const hasJoinedRef = useRef(false);
+
   // Load conversations on mount
   useEffect(() => {
     if (isOpen && isConnected) {
       loadConversations();
     }
-  }, [isOpen, isConnected, loadConversations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isConnected]);
 
-  // Join or create conversation when opening
+  // Join or create conversation when opening (only once)
   useEffect(() => {
-    if (isOpen && isConnected) {
+    if (isOpen && isConnected && !hasJoinedRef.current) {
       if (conversations.length > 0) {
         // Join existing conversation
         const latestConversation = conversations[0];
         joinConversation(latestConversation._id);
-      } else {
-        // Create new conversation
-        joinConversation();
+        hasJoinedRef.current = true;
+      } else if (conversations.length === 0) {
+        // Only create new conversation if we've loaded conversations and there are none
+        // Wait a bit to ensure conversations are loaded
+        const timer = setTimeout(() => {
+          if (conversations.length === 0) {
+            joinConversation();
+            hasJoinedRef.current = true;
+          }
+        }, 500);
+        return () => clearTimeout(timer);
       }
     }
-  }, [isOpen, isConnected, conversations, joinConversation]);
+    
+    // Reset when closing
+    if (!isOpen) {
+      hasJoinedRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isConnected, conversations.length]);
 
   const handleOpen = () => {
     setIsOpen(true);
@@ -167,7 +184,10 @@ const ChatWidget: React.FC = () => {
               </div>
             ) : (
               <>
-                {messages.map((msg) => (
+                {messages
+                  // Đảm bảo sort theo createdAt (cũ → mới) để hiển thị đúng thứ tự
+                  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                  .map((msg) => (
                   <div
                     key={msg._id}
                     className={`chat-widget-message ${

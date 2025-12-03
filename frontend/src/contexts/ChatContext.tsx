@@ -58,19 +58,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   
   const token = useSelector((state: any) => state?.auth?.token);
   const user = useSelector((state: any) => state?.auth?.user);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const currentConversationRef = useRef<ChatConversation | null>(null);
-  const socketRef = useRef<Socket | null>(null);
-  const isConnectingRef = useRef<boolean>(false);
-  
-  // Keep refs in sync with state
-  useEffect(() => {
-    currentConversationRef.current = currentConversation;
-  }, [currentConversation]);
-  
-  useEffect(() => {
-    socketRef.current = socket;
-  }, [socket]);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMarkedConversationRef = useRef<string | null>(null);
 
   // Get token from localStorage (same as authApi)
   const getToken = (): string | null => {
@@ -94,12 +84,14 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     return null;
   };
 
-  // Load messages - defined before connect to avoid initialization error
+  // Load messages
   const loadMessages = useCallback(async (conversationId: string) => {
     try {
       setLoading(true);
       const response = await chatService.getMessages(conversationId, { limit: 100 });
-      setMessages(response.data.reverse()); // Reverse để hiển thị từ cũ đến mới
+      // Backend đã sort từ cũ đến mới (createdAt: 1), không cần reverse
+      // Tin nhắn cũ nhất ở đầu, mới nhất ở cuối
+      setMessages(response.data);
     } catch (error: any) {
       console.error('[Chat] Error loading messages:', error);
       setError(error.message || 'Failed to load messages');
@@ -108,7 +100,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     }
   }, []);
 
-  // Load conversations - defined before connect to avoid initialization error
+  // Load conversations
   const loadConversations = useCallback(async () => {
     try {
       const response = await chatService.getConversations();
@@ -121,25 +113,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
   // Connect to Socket.io
   const connect = useCallback(() => {
-    // Prevent multiple connections
-    if (socketRef.current?.connected) {
-      console.log('[Chat] Already connected, skipping...');
+    if (socket?.connected) {
       return;
-    }
-    
-    // Prevent if already connecting
-    if (isConnectingRef.current) {
-      console.log('[Chat] Connection already in progress, skipping...');
-      return;
-    }
-    
-    // Clean up existing socket if it exists but not connected
-    if (socketRef.current && !socketRef.current.connected) {
-      console.log('[Chat] Cleaning up existing socket...');
-      socketRef.current.removeAllListeners();
-      socketRef.current.disconnect();
-      setSocket(null);
-      socketRef.current = null;
     }
 
     const authToken = token || getToken();
@@ -148,7 +123,6 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       return;
     }
 
-    isConnectingRef.current = true;
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     const socketUrl = API_URL.replace('/api', '');
 
@@ -158,27 +132,28 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       auth: {
         token: authToken
       },
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      reconnectionDelayMax: 5000
     });
 
     newSocket.on('connect', () => {
       console.log('[Chat] Connected to server');
       setIsConnected(true);
       setError(null);
-      isConnectingRef.current = false;
     });
 
     newSocket.on('disconnect', () => {
       console.log('[Chat] Disconnected from server');
       setIsConnected(false);
-      isConnectingRef.current = false;
     });
 
     newSocket.on('connect_error', (err) => {
       console.error('[Chat] Connection error:', err);
       setError(err.message);
       setIsConnected(false);
-      isConnectingRef.current = false;
     });
 
     newSocket.on('error', (data) => {
@@ -199,7 +174,16 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     newSocket.on('new_message', (data) => {
       console.log('[Chat] New message received:', data);
       if (data.message) {
-        setMessages(prev => [...prev, data.message]);
+        // Thêm tin nhắn mới vào cuối danh sách (tin nhắn mới nhất)
+        setMessages(prev => {
+          // Kiểm tra xem tin nhắn đã tồn tại chưa (tránh duplicate)
+          const exists = prev.some(msg => msg._id === data.message._id);
+          if (exists) {
+            return prev;
+          }
+          // Thêm vào cuối để giữ thứ tự cũ → mới
+          return [...prev, data.message];
+        });
       }
       if (data.conversation) {
         setCurrentConversation(data.conversation);
@@ -214,10 +198,26 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
     newSocket.on('new_admin_message', (data) => {
       console.log('[Chat] New admin message (user notification):', data);
-      // Use ref to access current conversation value
-      if (currentConversationRef.current?._id === data.conversationId) {
-        loadMessages(data.conversationId);
-      }
+      // Use functional update to access current conversation state
+      setCurrentConversation(prevConv => {
+        if (prevConv?._id === data.conversationId) {
+          // Nếu có message trong data, thêm trực tiếp vào danh sách
+          if (data.message) {
+            setMessages(prev => {
+              const exists = prev.some(msg => msg._id === data.message._id);
+              if (exists) {
+                return prev;
+              }
+              // Thêm vào cuối để giữ thứ tự cũ → mới
+              return [...prev, data.message];
+            });
+          } else {
+            // Nếu không có message, reload toàn bộ
+            loadMessages(data.conversationId);
+          }
+        }
+        return data.conversation || prevConv;
+      });
       loadConversations();
     });
 
@@ -230,14 +230,12 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     });
 
     newSocket.on('user_typing', (data) => {
-      if (data.userId !== user?.id) {
-        setTypingUsers(prev => {
-          if (!prev.includes(data.userName)) {
-            return [...prev, data.userName];
-          }
-          return prev;
-        });
-      }
+      setTypingUsers(prev => {
+        if (data.userId !== user?.id && !prev.includes(data.userName)) {
+          return [...prev, data.userName];
+        }
+        return prev;
+      });
     });
 
     newSocket.on('user_stop_typing', (data) => {
@@ -245,20 +243,16 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     });
 
     setSocket(newSocket);
-    socketRef.current = newSocket;
   }, [token, user, loadConversations, loadMessages]);
 
   // Disconnect
   const disconnect = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.removeAllListeners();
-      socketRef.current.disconnect();
-      socketRef.current = null;
+    if (socket) {
+      socket.disconnect();
       setSocket(null);
       setIsConnected(false);
-      isConnectingRef.current = false;
     }
-  }, []);
+  }, [socket]);
 
   // Join conversation
   const joinConversation = useCallback(async (conversationId?: string) => {
@@ -302,21 +296,40 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     });
   }, [socket, isConnected, currentConversation]);
 
-  // Mark as read
+  // Mark as read (with debouncing to prevent infinite loops)
   const markAsRead = useCallback(async () => {
     if (!currentConversation) {
       return;
     }
 
-    if (socket && isConnected) {
-      socket.emit('mark_as_read', { conversationId: currentConversation._id });
+    const conversationId = currentConversation._id;
+    
+    // Prevent duplicate calls for the same conversation
+    if (lastMarkedConversationRef.current === conversationId) {
+      return;
     }
 
-    try {
-      await chatService.markAsRead(currentConversation._id);
-    } catch (error) {
-      console.error('[Chat] Error marking as read:', error);
+    // Clear any pending mark as read calls
+    if (markAsReadTimeoutRef.current) {
+      clearTimeout(markAsReadTimeoutRef.current);
     }
+
+    // Debounce the mark as read call
+    markAsReadTimeoutRef.current = setTimeout(async () => {
+      lastMarkedConversationRef.current = conversationId;
+      
+      if (socket && isConnected) {
+        socket.emit('mark_as_read', { conversationId });
+      }
+
+      try {
+        await chatService.markAsRead(conversationId);
+      } catch (error) {
+        console.error('[Chat] Error marking as read:', error);
+        // Reset on error so we can retry
+        lastMarkedConversationRef.current = null;
+      }
+    }, 500); // 500ms debounce
   }, [currentConversation, socket, isConnected]);
 
   // Typing handlers
@@ -351,29 +364,47 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
   // Auto connect when token is available
   useEffect(() => {
-    if (token && user) {
+    if (token && user && !socket?.connected) {
       connect();
     }
 
     return () => {
-      if (socketRef.current) {
-        disconnect();
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
+        setIsConnected(false);
       }
+      // Clear mark as read timeout on unmount
+      if (markAsReadTimeoutRef.current) {
+        clearTimeout(markAsReadTimeoutRef.current);
+        markAsReadTimeoutRef.current = null;
+      }
+      lastMarkedConversationRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, user]); // Removed connect and disconnect from dependencies to prevent infinite loop
+  }, [token, user]);
 
-  // Auto mark as read when new messages arrive
+  // Auto mark as read when new messages arrive (with proper guards)
   useEffect(() => {
-    if (currentConversation && messages.length > 0) {
-      const unreadMessages = messages.filter(
-        msg => !msg.isRead && msg.senderType !== 'user'
-      );
-      if (unreadMessages.length > 0) {
-        markAsRead();
-      }
+    if (!currentConversation || messages.length === 0) {
+      return;
     }
-  }, [messages, currentConversation, markAsRead]);
+
+    // Only mark as read if we haven't already marked this conversation
+    if (lastMarkedConversationRef.current === currentConversation._id) {
+      return;
+    }
+
+    const unreadMessages = messages.filter(
+      msg => !msg.isRead && msg.senderType !== 'user'
+    );
+    
+    // Only mark as read if there are actually unread messages
+    if (unreadMessages.length > 0) {
+      markAsRead();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, currentConversation?._id]);
 
   const value: ChatContextType = {
     socket,

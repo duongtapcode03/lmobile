@@ -85,8 +85,17 @@
   .chat-widget-messages {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px;
     background: #f5f5f5;
+    
+    // Hide scrollbar but allow scrolling
+    scrollbar-width: none; // Firefox
+    -ms-overflow-style: none; // IE and Edge
+    
+    &::-webkit-scrollbar {
+      display: none; // Chrome, Safari, Opera
+    }
 
     .chat-widget-loading,
     .chat-widget-error,

@@ -41,7 +41,8 @@ const AdminSupport: React.FC = () => {
     if (isConnected) {
       loadConversations();
     }
-  }, [isConnected, loadConversations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
 
   // Reload conversations periodically to get updates (backup for socket events)
   useEffect(() => {
@@ -53,16 +54,24 @@ const AdminSupport: React.FC = () => {
 
       return () => clearInterval(interval);
     }
-  }, [isConnected, loadConversations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
 
   // Auto-select first conversation if none selected
+  const hasAutoSelectedRef = useRef(false);
   useEffect(() => {
-    if (conversations.length > 0 && !selectedConversation) {
+    if (conversations.length > 0 && !selectedConversation && !hasAutoSelectedRef.current) {
       const firstConversation = conversations[0];
       setSelectedConversation(firstConversation);
       joinConversation(firstConversation._id);
+      hasAutoSelectedRef.current = true;
     }
-  }, [conversations, selectedConversation, joinConversation]);
+    // Reset when conversations change significantly
+    if (conversations.length === 0) {
+      hasAutoSelectedRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations.length, selectedConversation]);
 
   // Update selected conversation when currentConversation changes
   useEffect(() => {
@@ -91,12 +100,23 @@ const AdminSupport: React.FC = () => {
     }
   }, [messages, selectedConversation]);
 
-  // Mark as read when conversation is selected
+  // Mark as read when conversation is selected (with debouncing)
+  const lastMarkedRef = useRef<string | null>(null);
   useEffect(() => {
     if (selectedConversation && isConnected) {
-      markAsRead();
+      const conversationId = selectedConversation._id;
+      // Only mark as read once per conversation selection
+      if (lastMarkedRef.current !== conversationId) {
+        lastMarkedRef.current = conversationId;
+        // Debounce the mark as read call
+        const timer = setTimeout(() => {
+          markAsRead();
+        }, 300);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [selectedConversation, isConnected, markAsRead]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversation?._id, isConnected]);
 
   const handleSelectConversation = async (conversation: ChatConversation) => {
     try {
@@ -301,6 +321,8 @@ const AdminSupport: React.FC = () => {
                     // Remove duplicates - keep first occurrence
                     index === self.findIndex(m => m._id === msg._id)
                   )
+                  // Đảm bảo sort theo createdAt (cũ → mới) để hiển thị đúng thứ tự
+                  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
                   .map((msg: ChatMessage, index) => {
                   const isAdmin = msg.senderType === 'admin';
                   return (

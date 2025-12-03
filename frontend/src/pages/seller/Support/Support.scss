@@ -23,7 +23,16 @@
     .support-conversations-list {
       flex: 1;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 8px 0;
+      
+      // Hide scrollbar but allow scrolling
+      scrollbar-width: none; // Firefox
+      -ms-overflow-style: none; // IE and Edge
+      
+      &::-webkit-scrollbar {
+        display: none; // Chrome, Safari, Opera
+      }
 
       .loading-container {
         display: flex;
@@ -87,6 +96,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    overflow: hidden; // Prevent entire content from scrolling
 
     .support-chat-header {
       padding: 16px;
@@ -95,6 +105,7 @@
       justify-content: space-between;
       align-items: center;
       background: #fff;
+      flex-shrink: 0; // Prevent header from shrinking
 
       .chat-header-info {
         display: flex;
@@ -109,9 +120,19 @@
 
     .support-chat-messages {
       flex: 1;
+      min-height: 0; // Important for flex to work correctly
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 16px;
       background: #fafafa;
+      
+      // Hide scrollbar but allow scrolling
+      scrollbar-width: none; // Firefox
+      -ms-overflow-style: none; // IE and Edge
+      
+      &::-webkit-scrollbar {
+        display: none; // Chrome, Safari, Opera
+      }
 
       .loading-container {
         display: flex;
@@ -178,6 +199,7 @@
       display: flex;
       gap: 8px;
       background: #fff;
+      flex-shrink: 0; // Prevent input from shrinking - always visible
 
       .ant-input {
         flex: 1;

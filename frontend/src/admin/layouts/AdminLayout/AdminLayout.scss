@@ -50,6 +50,10 @@
   .admin-content-layout {
     margin-left: 250px;
     transition: margin-left 0.2s;
+    height: 100vh;
+    overflow: hidden; // Prevent main content from scrolling
+    display: flex;
+    flex-direction: column;
   }
 
   &.ant-layout-sider-collapsed ~ .admin-content-layout {
@@ -66,6 +70,7 @@
     position: sticky;
     top: 0;
     z-index: 999;
+    flex-shrink: 0; // Prevent header from shrinking
 
     .admin-header-left {
       display: flex;
@@ -104,12 +109,39 @@
   }
 
   .admin-content {
-    margin: 24px;
+    flex: 1;
+    overflow: hidden; // Prevent content from scrolling
+    display: flex;
+    flex-direction: column;
     padding: 24px;
-    background: #fff;
-    border-radius: 8px;
-    min-height: calc(100vh - 112px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    background: #f0f2f5;
+    
+    // For support page specifically - full height, no padding
+    .seller-support-layout,
+    .admin-support-layout {
+      height: 100%;
+      margin: -24px; // Negative margin to offset parent padding
+      padding: 0;
+    }
+    
+    // Default style for other pages
+    > * {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      padding: 24px;
+      
+      // Hide scrollbar but allow scrolling
+      scrollbar-width: none; // Firefox
+      -ms-overflow-style: none; // IE and Edge
+      
+      &::-webkit-scrollbar {
+        display: none; // Chrome, Safari, Opera
+      }
+    }
   }
 }
 

@@ -41,6 +41,8 @@ export function setupChatSocket(io) {
       socket.userId = user._id.toString();
       socket.userType = userType;
       socket.userName = user.name || user.email;
+      socket.user = user; // Lưu user object để dùng sau này
+      socket.userRole = user.role; // Lưu role riêng để dễ truy cập
       
       next();
     } catch (error) {
@@ -99,7 +101,7 @@ export function setupChatSocket(io) {
         }
 
         // Kiểm tra quyền truy cập
-        const userRole = socket.user?.role || 'user';
+        const userRole = socket.userRole || socket.user?.role || 'user';
         const isAdmin = userRole === 'admin';
         const isSeller = userRole === 'seller';
         const adminId = isAdmin ? socket.userId : null;
@@ -151,7 +153,8 @@ export function setupChatSocket(io) {
         if (socket.userType === "admin") {
           io.to(`user_${conversation.userId}`).emit("new_admin_message", {
             conversationId,
-            message: chatMessage
+            message: chatMessage,
+            conversation: conversation
           });
         }
       } catch (error) {
@@ -171,7 +174,7 @@ export function setupChatSocket(io) {
           return socket.emit("error", { message: "Conversation ID is required" });
         }
 
-        const userRole = socket.user?.role || 'user';
+        const userRole = socket.userRole || socket.user?.role || 'user';
         const isAdmin = userRole === 'admin';
         const isSeller = userRole === 'seller';
         const adminId = isAdmin ? socket.userId : null;
