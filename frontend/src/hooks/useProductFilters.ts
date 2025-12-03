@@ -76,8 +76,9 @@ export const useProductFilters = (
       // Only update if filters actually changed
       if (prevInitialFiltersRef.current !== currentFiltersStr) {
         prevInitialFiltersRef.current = currentFiltersStr;
-        console.log('🔄 Syncing filters from Redux:', initialFilters);
-        setFilters(initialFilters);
+        console.log('🟠 useProductFilters - initialFilters changed, syncing to local state:', initialFilters);
+        // Force update filters state để trigger debounced effect
+        setFilters({ ...initialFilters });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,28 +131,26 @@ export const useProductFilters = (
         ...(filters.category && { category: filters.category }),
         // Brands: Convert array to comma-separated string để backend dễ xử lý
         ...(filters.brands && filters.brands.length > 0 && { brand: filters.brands.join(',') }),
-        // Price Range
-        ...(filters.priceRange && {
-          minPrice: filters.priceRange[0],
-          maxPrice: filters.priceRange[1],
+        // Price Range - chỉ gửi nếu không phải giá trị mặc định
+        ...(filters.priceRange && 
+          (filters.priceRange[0] > 0 || filters.priceRange[1] < 50000000) && {
+          minPrice: filters.priceRange[0] > 0 ? filters.priceRange[0] : undefined,
+          maxPrice: filters.priceRange[1] < 50000000 ? filters.priceRange[1] : undefined,
         }),
-        // Storage: Convert array to comma-separated string để backend dễ xử lý
-        ...(filters.storage && filters.storage.length > 0 && { storage: filters.storage.join(',') }),
-        // Screen Size: Convert array to comma-separated string để backend dễ xử lý
-        ...(filters.screenSize && filters.screenSize.length > 0 && { screenSize: filters.screenSize.join(',') }),
       };
-
-      // Debug: Log filter để kiểm tra category có được truyền
-      console.log('🔍 useProductFilters - Current filters:', filters);
-      console.log('🔍 useProductFilters - PhoneFilter:', phoneFilter);
-      console.log('🔍 useProductFilters - productType:', productType);
+      
+      console.log('🟡 useProductFilters - Current filters state:', filters);
+      console.log('🟡 useProductFilters - PhoneFilter to API:', phoneFilter);
 
       let response: PhoneListResponse;
 
-      // API mới: Nếu có productType, dùng API getPhonesByType (ưu tiên cao nhất)
-      if (productType && ['featured', 'new', 'bestSeller'].includes(productType)) {
-        console.log('✅ Using getPhonesByType API for type:', productType);
-        
+      // Nếu có brand filter hoặc price filter, không dùng productType API (vì productType API không hỗ trợ filter)
+      const hasBrandOrPriceFilter = 
+        (filters.brands && filters.brands.length > 0) ||
+        (filters.priceRange && (filters.priceRange[0] > 0 || filters.priceRange[1] < 50000000));
+
+      // Đơn giản hóa: Nếu có productType và KHÔNG có brand/price filter, dùng API getPhonesByType
+      if (productType && ['featured', 'new', 'bestSeller'].includes(productType) && !hasBrandOrPriceFilter) {
         response = await phoneService.getPhonesByType(productType, {
           page,
           limit,
@@ -159,60 +158,24 @@ export const useProductFilters = (
           ...(sortOrder && { sortOrder }),
         });
       }
-      // Kiểm tra xem có filter nào khác ngoài category không
-      else {
-        const hasOtherFilters = 
-          (filters.brands && filters.brands.length > 0) ||
-          (filters.priceRange && (filters.priceRange[0] > 0 || filters.priceRange[1] < 50000000)) ||
-          filters.inStock !== undefined ||
-          (filters.storage && filters.storage.length > 0) ||
-          (filters.nfc && filters.nfc.length > 0) ||
-          (filters.screenSize && filters.screenSize.length > 0);
-
-        // Nếu có category và KHÔNG có filter khác, dùng API mới getPhonesByCategoryId
-        if (filters.category && !hasOtherFilters && !searchQuery && sortBy === 'default') {
-        console.log('✅ Using getPhonesByCategoryId API for category:', filters.category);
-        
-        // Convert category to number for API call
+      // Nếu có category, luôn dùng API category với tất cả filters
+      else if (filters.category) {
         const categoryId = typeof filters.category === 'number' 
           ? filters.category 
           : parseInt(String(filters.category), 10);
         
-        response = await phoneService.getPhonesByCategoryId(categoryId, {
-          page,
-          limit
-        });
-      }
-      // Nếu có category và KHÔNG có filter khác nhưng có search/sort, dùng API category đơn giản
-      else if (filters.category && !hasOtherFilters) {
-        console.log('✅ Using simple categoryRefs API for category:', filters.category);
-        
-        const categoryId = typeof filters.category === 'number' 
-          ? filters.category 
-          : filters.category;
-        
-        response = await phoneService.getPhonesByCategory(categoryId, {
-          page,
-          limit
-        });
-      }
-      // Nếu có category và có filter khác, dùng API category với filters
-      else if (filters.category) {
-        console.log('✅ Using category API with filters for category:', filters.category);
-        
         // Tách category ra khỏi filter để gọi API category
         const { category, ...otherFilters } = phoneFilter;
         
-        response = await phoneService.getPhonesByCategory(filters.category, {
+        response = await phoneService.getPhonesByCategory(categoryId, {
           ...otherFilters,
           page,
           limit,
         });
-        } else {
-          // Không có category, dùng API chung
-          console.log('📋 Using general products API');
-          response = await phoneService.getPhones(phoneFilter);
-        }
+      }
+      // Không có category, dùng API chung với tất cả filters
+      else {
+        response = await phoneService.getPhones(phoneFilter);
       }
 
       setProducts(response.data || []);
@@ -228,12 +191,14 @@ export const useProductFilters = (
     }
   }, [filters, searchQuery, sortBy, featured, productType, page, limit]);
 
-  // Debounced filter change
+  // Debounced filter change - gọi API khi filters thay đổi
   useEffect(() => {
+    // Clear previous timer
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
 
+    // Set new timer để gọi API sau khi debounce
     debounceTimerRef.current = setTimeout(() => {
       fetchProducts();
       if (onFilterChange) {
@@ -246,8 +211,8 @@ export const useProductFilters = (
         clearTimeout(debounceTimerRef.current);
       }
     };
-    // Remove onFilterChange from dependencies to prevent infinite loop
-    // onFilterChange is optional callback and may change on every render
+    // Dependencies: filters, searchQuery, sortBy, featured, productType, fetchProducts
+    // fetchProducts được memoized với filters trong dependencies, nên khi filters thay đổi, fetchProducts sẽ được tạo lại
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, searchQuery, sortBy, featured, productType, debounceMs, fetchProducts]);
 

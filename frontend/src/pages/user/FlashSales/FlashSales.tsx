@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Typography, Select, Spin, message, Tag } from 'antd';
+import { Row, Col, Typography, Select, Spin, Tag } from 'antd';
 import { ThunderboltOutlined, FireOutlined } from '@ant-design/icons';
-import { PageWrapper } from '../../../components';
+import { PageWrapper, useToast } from '../../../components';
 import ProductCard from '../../../components/ProductCard';
 import flashSaleService, { type FlashSale } from '../../../api/flashSaleService';
 import type { PhoneDetail } from '../../../types';
@@ -16,6 +16,7 @@ const { Title } = Typography;
 const { Option } = Select;
 
 const FlashSalesPage: React.FC = () => {
+  const toast = useToast();
   const [flashSales, setFlashSales] = useState<FlashSale[]>([]);
   const [loading, setLoading] = useState(false);
   const [sessionFilter, setSessionFilter] = useState<string>('all');
@@ -67,7 +68,7 @@ const FlashSalesPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to load flash sales:', error);
-      message.error('Không thể tải danh sách flash sales');
+      toast.error('Không thể tải danh sách flash sales');
     } finally {
       setLoading(false);
     }
@@ -132,11 +133,11 @@ const FlashSalesPage: React.FC = () => {
     });
 
   const handleAddToCart = (productId: string) => {
-    message.success('Đã thêm vào giỏ hàng');
+    toast.success('Đã thêm vào giỏ hàng');
   };
 
   const handleAddToWishlist = (productId: string) => {
-    message.success('Đã thêm vào yêu thích');
+    toast.success('Đã thêm vào yêu thích');
   };
 
   return (

@@ -236,34 +236,38 @@ const ReturnRequests: React.FC = () => {
       title: 'Mã yêu cầu',
       dataIndex: '_id',
       key: '_id',
-      render: (id: string) => <Text code>{id.slice(-8)}</Text>,
-      width: 120
+      render: (id: string) => <Text code style={{ fontSize: 12 }}>{id.slice(-8)}</Text>,
+      width: 100,
+      fixed: 'left' as const
     },
     {
       title: 'Mã đơn hàng',
       dataIndex: 'orderNumber',
       key: 'orderNumber',
-      render: (orderNumber: string) => <Text strong>{orderNumber}</Text>
+      render: (orderNumber: string) => <Text strong style={{ fontSize: 13 }}>{orderNumber}</Text>,
+      width: 140
     },
     {
       title: 'Khách hàng',
       key: 'user',
+      width: 180,
       render: (_: any, record: ReturnRequest) => {
         const user = typeof record.user === 'object' ? record.user : null;
         return user ? (
           <div>
-            <div>{user.name}</div>
-            <Text type="secondary" style={{ fontSize: 12 }}>{user.email}</Text>
+            <div style={{ fontWeight: 500, marginBottom: 2 }}>{user.name}</div>
+            <Text type="secondary" style={{ fontSize: 11 }}>{user.email}</Text>
           </div>
         ) : '-';
       }
     },
     {
-      title: 'Số sản phẩm',
+      title: 'Sản phẩm',
       key: 'itemsCount',
       align: 'center' as const,
+      width: 90,
       render: (_: any, record: ReturnRequest) => (
-        <Text>{record.items?.length || 0} sản phẩm</Text>
+        <Text>{record.items?.length || 0}</Text>
       )
     },
     {
@@ -271,103 +275,89 @@ const ReturnRequests: React.FC = () => {
       dataIndex: 'refundAmount',
       key: 'refundAmount',
       align: 'right' as const,
+      width: 130,
       render: (amount: number) => (
-        <Text strong style={{ color: '#ff4d4f' }}>{formatPrice(amount)}</Text>
+        <Text strong style={{ color: '#ff4d4f', fontSize: 13 }}>{formatPrice(amount)}</Text>
       )
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
+      width: 110,
       render: (status: string) => (
-        <Tag color={getStatusColor(status)}>{getStatusText(status)}</Tag>
+        <Tag color={getStatusColor(status)} style={{ margin: 0 }}>{getStatusText(status)}</Tag>
       )
     },
     {
-      title: 'Trạng thái hoàn tiền',
+      title: 'Hoàn tiền',
       dataIndex: 'refundStatus',
       key: 'refundStatus',
+      width: 100,
       render: (status: string) => (
-        <Tag color={getRefundStatusColor(status)}>{getRefundStatusText(status)}</Tag>
+        <Tag color={getRefundStatusColor(status)} style={{ margin: 0 }}>{getRefundStatusText(status)}</Tag>
       )
     },
     {
       title: 'Ngày tạo',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date: string) => formatDate(date),
-      width: 150
+      render: (date: string) => <Text style={{ fontSize: 12 }}>{formatDate(date)}</Text>,
+      width: 140
     },
     {
       title: 'Thao tác',
       key: 'action',
-      width: 200,
+      width: 100,
+      fixed: 'right' as const,
+      align: 'center' as const,
       render: (_: any, record: ReturnRequest) => {
-        const actions = [];
-
-        if (record.status === 'pending') {
-          actions.push(
+        return (
+          <Space size="small" style={{ display: 'flex', justifyContent: 'center' }}>
+            {record.status === 'pending' && (
+              <>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<CheckOutlined />}
+                  onClick={() => handleAction('approve', record)}
+                  title="Duyệt"
+                />
+                <Button
+                  danger
+                  size="small"
+                  icon={<CloseOutlined />}
+                  onClick={() => handleAction('reject', record)}
+                  title="Từ chối"
+                />
+              </>
+            )}
+            {record.status === 'approved' && (
+              <Button
+                type="primary"
+                size="small"
+                icon={<ShoppingOutlined />}
+                onClick={() => handleAction('process', record)}
+                title="Xác nhận nhận hàng"
+              />
+            )}
+            {record.status === 'processing' && (
+              <Button
+                type="primary"
+                size="small"
+                icon={<DollarOutlined />}
+                onClick={() => handleAction('complete', record)}
+                title="Hoàn tiền"
+              />
+            )}
             <Button
-              key="approve"
-              type="primary"
               size="small"
-              icon={<CheckOutlined />}
-              onClick={() => handleAction('approve', record)}
-            >
-              Duyệt
-            </Button>,
-            <Button
-              key="reject"
-              danger
-              size="small"
-              icon={<CloseOutlined />}
-              onClick={() => handleAction('reject', record)}
-            >
-              Từ chối
-            </Button>
-          );
-        }
-
-        if (record.status === 'approved') {
-          actions.push(
-            <Button
-              key="process"
-              type="primary"
-              size="small"
-              icon={<ShoppingOutlined />}
-              onClick={() => handleAction('process', record)}
-            >
-              Xác nhận nhận hàng
-            </Button>
-          );
-        }
-
-        if (record.status === 'processing') {
-          actions.push(
-            <Button
-              key="complete"
-              type="primary"
-              size="small"
-              icon={<DollarOutlined />}
-              onClick={() => handleAction('complete', record)}
-            >
-              Hoàn tiền
-            </Button>
-          );
-        }
-
-        actions.push(
-          <Button
-            key="view"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetail(record._id)}
-          >
-            Chi tiết
-          </Button>
+              icon={<EyeOutlined />}
+              onClick={() => handleViewDetail(record._id)}
+              title="Xem chi tiết"
+            />
+          </Space>
         );
-
-        return <Space size="small">{actions}</Space>;
       }
     }
   ];
@@ -451,6 +441,7 @@ const ReturnRequests: React.FC = () => {
           dataSource={returnRequests}
           rowKey="_id"
           loading={loading}
+          scroll={{ x: 1200 }}
           pagination={{
             current: pagination.current,
             pageSize: pagination.pageSize,

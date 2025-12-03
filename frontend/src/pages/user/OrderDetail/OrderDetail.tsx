@@ -13,7 +13,6 @@ import {
   Space,
   Typography,
   Spin,
-  message,
   Divider,
   Timeline,
   Empty
@@ -31,7 +30,7 @@ import feedbackService, { type Feedback } from '../../../api/feedbackService';
 import returnRequestService, { type ReturnRequest } from '../../../api/returnRequestService';
 import ReviewModal from '../../../components/Common/ReviewModal/ReviewModal';
 import ReturnRequestModal from '../../../components/Common/ReturnRequestModal/ReturnRequestModal';
-import { PageWrapper } from '../../../components';
+import { PageWrapper, useToast } from '../../../components';
 import './OrderDetail.scss';
 
 const { Title, Text } = Typography;
@@ -39,6 +38,7 @@ const { Title, Text } = Typography;
 const OrderDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
@@ -53,6 +53,8 @@ const OrderDetailPage: React.FC = () => {
   const [returnRequestModalVisible, setReturnRequestModalVisible] = useState(false);
   const [returnRequest, setReturnRequest] = useState<ReturnRequest | null>(null);
   const [loadingReturnRequest, setLoadingReturnRequest] = useState(false);
+  const [canReturnOrder, setCanReturnOrder] = useState(false);
+  const [returnDeadlineMessage, setReturnDeadlineMessage] = useState<string>('');
 
   useEffect(() => {
     if (id) {
@@ -64,8 +66,34 @@ const OrderDetailPage: React.FC = () => {
     if (order && order.status === 'delivered') {
       loadFeedbacksForOrder();
       loadReturnRequest();
+      checkReturnEligibility();
     }
   }, [order]);
+
+  const checkReturnEligibility = () => {
+    if (!order || order.status !== 'delivered' || !order.deliveredAt) {
+      setCanReturnOrder(false);
+      setReturnDeadlineMessage('');
+      return;
+    }
+
+    const deliveredDate = new Date(order.deliveredAt);
+    const now = new Date();
+    const daysSinceDelivery = Math.floor((now.getTime() - deliveredDate.getTime()) / (1000 * 60 * 60 * 24));
+    const daysRemaining = 7 - daysSinceDelivery;
+
+    if (daysSinceDelivery > 7) {
+      setCanReturnOrder(false);
+      setReturnDeadlineMessage(`Đã quá thời hạn hoàn hàng (7 ngày kể từ khi nhận hàng). Đơn hàng đã được giao ${daysSinceDelivery} ngày trước.`);
+    } else if (daysRemaining > 0) {
+      setCanReturnOrder(true);
+      setReturnDeadlineMessage(`Bạn còn ${daysRemaining} ngày để yêu cầu hoàn hàng.`);
+    } else {
+      // Ngày cuối cùng
+      setCanReturnOrder(true);
+      setReturnDeadlineMessage('Hôm nay là ngày cuối cùng để yêu cầu hoàn hàng.');
+    }
+  };
 
   const loadReturnRequest = async () => {
     if (!order) return;
@@ -85,6 +113,10 @@ const OrderDetailPage: React.FC = () => {
       
       if (existingRequest) {
         setReturnRequest(existingRequest);
+        // Nếu đã có request đang xử lý, không thể tạo mới
+        if (['pending', 'approved', 'processing'].includes(existingRequest.status)) {
+          setCanReturnOrder(false);
+        }
       }
     } catch (error) {
       console.error('Error loading return request:', error);
@@ -98,7 +130,7 @@ const OrderDetailPage: React.FC = () => {
       setOrder(orderData);
     } catch (error: any) {
       console.error('Error loading order detail:', error);
-      message.error(error.response?.data?.message || 'Không thể tải chi tiết đơn hàng');
+      toast.error(error.response?.data?.message || 'Không thể tải chi tiết đơn hàng');
       if (error.response?.status === 404) {
         navigate('/orders');
       }
@@ -156,11 +188,11 @@ const OrderDetailPage: React.FC = () => {
     
     try {
       await orderService.cancelOrder(order._id);
-      message.success('Đã hủy đơn hàng');
+      toast.success('Đã hủy đơn hàng');
       loadOrderDetail(order._id);
     } catch (error: any) {
       console.error('Error cancelling order:', error);
-      message.error(error.response?.data?.message || 'Không thể hủy đơn hàng');
+      toast.error(error.response?.data?.message || 'Không thể hủy đơn hàng');
     }
   };
 
@@ -384,14 +416,68 @@ const OrderDetailPage: React.FC = () => {
                   </Button>
                 )}
                 {order.status === 'delivered' && !returnRequest && (
-                  <Button type="primary" onClick={() => setReturnRequestModalVisible(true)}>
-                    Yêu cầu hoàn hàng
-                  </Button>
+                  <>
+                    {canReturnOrder ? (
+                      <Button 
+                        type="primary" 
+                        onClick={() => {
+                          // Double check trước khi mở modal
+                          if (order.deliveredAt) {
+                            const deliveredDate = new Date(order.deliveredAt);
+                            const now = new Date();
+                            const daysSinceDelivery = Math.floor((now.getTime() - deliveredDate.getTime()) / (1000 * 60 * 60 * 24));
+                            
+                            if (daysSinceDelivery > 7) {
+                              toast.error('Đã quá thời hạn hoàn hàng (7 ngày kể từ khi nhận hàng)');
+                              return;
+                            }
+                          }
+                          setReturnRequestModalVisible(true);
+                        }}
+                      >
+                        Yêu cầu hoàn hàng
+                      </Button>
+                    ) : (
+                      <Button type="primary" disabled title={returnDeadlineMessage}>
+                        Yêu cầu hoàn hàng
+                      </Button>
+                    )}
+                    {returnDeadlineMessage && (
+                      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+                        {returnDeadlineMessage}
+                      </Text>
+                    )}
+                  </>
                 )}
                 {returnRequest && (
-                  <Tag color={getReturnRequestStatusColor(returnRequest.status)}>
-                    {getReturnRequestStatusText(returnRequest.status)}
-                  </Tag>
+                  <>
+                    <Tag color={getReturnRequestStatusColor(returnRequest.status)}>
+                      {getReturnRequestStatusText(returnRequest.status)}
+                    </Tag>
+                    {returnRequest.status === 'cancelled' || returnRequest.status === 'rejected' ? (
+                      canReturnOrder && (
+                        <Button 
+                          type="primary" 
+                          size="small"
+                          onClick={() => {
+                            if (order.deliveredAt) {
+                              const deliveredDate = new Date(order.deliveredAt);
+                              const now = new Date();
+                              const daysSinceDelivery = Math.floor((now.getTime() - deliveredDate.getTime()) / (1000 * 60 * 60 * 24));
+                              
+                              if (daysSinceDelivery > 7) {
+                                toast.error('Đã quá thời hạn hoàn hàng (7 ngày kể từ khi nhận hàng)');
+                                return;
+                              }
+                            }
+                            setReturnRequestModalVisible(true);
+                          }}
+                        >
+                          Yêu cầu lại
+                        </Button>
+                      )
+                    ) : null}
+                  </>
                 )}
               </Space>
             }

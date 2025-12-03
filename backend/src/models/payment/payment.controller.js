@@ -15,22 +15,20 @@ export const paymentController = {
    * Theo code mẫu: tạo payment từ cart, tạo order sau khi thanh toán thành công
    */
   createMomoPayment: catchAsync(async (req, res) => {
-    const { typePayment } = req.body;
+    const { cartData } = req.body;
     const userId = req.user?.id;
 
-    // Tìm cart của user
-    const findCartUser = await Cart.findOne({ user: userId });
-    if (!findCartUser) {
-      throw new AppError('Giỏ hàng không tồn tại', 404);
+    if (!cartData) {
+      throw new AppError('Vui lòng cung cấp cartData', 400);
     }
 
-    if (findCartUser.items.length === 0) {
-      throw new AppError('Giỏ hàng không có sản phẩm', 400);
-    }
+    // Tính toán tổng tiền từ cartData
+    const totalAmount = cartData.totalAmount || 0;
+    const amount = Math.round(Number(totalAmount));
 
-    // Tính toán tổng tiền
-    const totalPrice = findCartUser.totalAmount || 0;
-    const finalPrice = findCartUser.finalAmount || totalPrice;
+    if (amount <= 0) {
+      throw new AppError('Số tiền thanh toán không hợp lệ', 400);
+    }
 
     // Tạo orderId theo code mẫu
     const partnerCode = process.env.MOMO_PARTNER_CODE || 'MOMO';
@@ -40,7 +38,6 @@ export const paymentController = {
     const redirectUrl = process.env.MOMO_RETURN_URL || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/momo/return`;
     const ipnUrl = process.env.MOMO_NOTIFY_URL || `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/v1/payment/momo/ipn`;
     const requestType = 'payWithMethod';
-    const amount = Math.round(Number(finalPrice));
     const extraData = '';
 
     // Lấy credentials từ env
@@ -107,12 +104,20 @@ export const paymentController = {
             const response = JSON.parse(data);
             
             if (response.resultCode === 0) {
-              // Lưu thông tin cart vào memory để dùng khi callback (hoặc dùng Redis trong production)
-              global.momoPendingCarts = global.momoPendingCarts || new Map();
-              global.momoPendingCarts.set(orderId, {
+              // Lưu cartData vào memory để dùng khi callback (hoặc dùng Redis trong production)
+              global.momoPendingOrders = global.momoPendingOrders || new Map();
+              global.momoPendingOrders.set(orderId, {
                 userId,
-                cart: findCartUser,
+                cartData,
                 createdAt: new Date()
+              });
+
+              console.log('[MoMo Create] Stored pending order:', {
+                orderId,
+                userId,
+                cartDataKeys: Object.keys(cartData),
+                pendingOrdersSize: global.momoPendingOrders.size,
+                pendingOrderKeys: Array.from(global.momoPendingOrders.keys())
               });
 
               return res.json({
@@ -147,148 +152,190 @@ export const paymentController = {
   /**
    * Xử lý callback từ MoMo (IPN - Instant Payment Notification)
    * POST /api/v1/payment/momo/ipn
-   * Theo code mẫu: parse userId từ orderInfo, tạo order từ cart
+   * Tạo order sau khi thanh toán thành công
    */
   momoIPN: catchAsync(async (req, res) => {
-    const { resultCode, orderInfo } = req.body;
+    const { resultCode, orderId, orderInfo, transId } = req.body;
+
+    console.log('[MoMo IPN] Received callback:', {
+      orderId,
+      resultCode,
+      orderInfo,
+      transId
+    });
 
     if (resultCode !== '0') {
       return res.json({
         partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
-        orderId: req.body.orderId,
+        orderId: orderId,
         resultCode: resultCode,
         message: 'Payment failed'
       });
     }
 
-    // Parse userId từ orderInfo theo code mẫu: "Thanh toan don hang {userId}"
-    const userId = orderInfo.split(' ')[4];
-    if (!userId) {
-      return res.json({
-        partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
-        orderId: req.body.orderId,
-        resultCode: '99',
-        message: 'Invalid orderInfo'
-      });
-    }
+    // Kiểm tra xem có phải temporary order (chưa tạo order) không
+    const pendingOrder = global.momoPendingOrders?.get(orderId);
+    
+    console.log('[MoMo IPN] Pending order check:', {
+      orderId,
+      hasPendingOrder: !!pendingOrder,
+      pendingOrdersSize: global.momoPendingOrders?.size || 0,
+      pendingOrderKeys: global.momoPendingOrders ? Array.from(global.momoPendingOrders.keys()) : []
+    });
 
-    // Tìm cart của user
-    const findCartUser = await Cart.findOne({ user: userId });
-    if (!findCartUser) {
-      return res.json({
-        partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
-        orderId: req.body.orderId,
-        resultCode: '99',
-        message: 'Cart not found'
-      });
-    }
+    if (pendingOrder) {
+      // Tạo order từ cartData sau khi thanh toán thành công
+      try {
+        const { userId, cartData } = pendingOrder;
+        console.log('[MoMo IPN] Creating order from cartData after successful payment');
+        
+        const order = await orderService.createOrderFromCart(userId, {
+          shippingAddress: cartData.shippingAddress,
+          paymentMethod: cartData.paymentMethod || 'momo',
+          shippingMethod: cartData.shippingMethod || 'standard',
+          notes: cartData.notes || '',
+          isGift: cartData.isGift || false,
+          giftMessage: cartData.giftMessage || '',
+          selectedItemIds: cartData.selectedItemIds,
+          flashSaleReservationIds: cartData.flashSaleReservationIds
+        });
 
-    try {
-      // Tạo order từ cart (cần có orderService.createOrderFromCart)
-      // Tạm thời tạo order đơn giản
-      const order = await orderService.createOrderFromCart(userId, {
-        paymentMethod: 'momo',
-        shippingMethod: 'standard'
-      });
+        // Cập nhật order với payment info
+        order.paymentInfo.status = 'paid';
+        order.paymentInfo.transactionId = transId;
+        order.paymentInfo.paidAt = new Date();
+        order.status = 'confirmed'; // Luôn set confirmed khi thanh toán thành công
+        
+        // Mark paymentInfo và status là modified để đảm bảo save
+        order.markModified('paymentInfo');
+        order.markModified('status');
+        
+        await order.save();
+        
+        console.log('[MoMo IPN] Order updated - paymentStatus:', order.paymentInfo.status, 'orderStatus:', order.status);
 
-      // Cập nhật order với payment info
-      order.paymentInfo.status = 'paid';
-      order.paymentInfo.transactionId = req.body.transId;
-      order.paymentInfo.paidAt = new Date();
-      if (order.status === 'pending') {
-        order.status = 'confirmed';
+        // Xóa pending order khỏi memory
+        global.momoPendingOrders.delete(orderId);
+
+        console.log('[MoMo IPN] Order created successfully:', order.orderNumber);
+
+        return res.json({
+          partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
+          orderId: orderId,
+          resultCode: '0',
+          message: 'Success'
+        });
+      } catch (error) {
+        console.error('[MoMo IPN] Error creating order from cartData:', error);
+        return res.json({
+          partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
+          orderId: orderId,
+          resultCode: '99',
+          message: error.message || 'Error creating order'
+        });
       }
-      await order.save();
-
-      // Xóa cart và tạo cart mới
-      await findCartUser.deleteOne();
-      await Cart.create({
-        user: userId,
-        items: []
-      });
-
-      // Giảm số lượng coupon nếu có
-      if (findCartUser.couponCode) {
-        // TODO: Implement coupon logic
-      }
-
-      console.log('[MoMo IPN] Order created successfully:', order.orderNumber);
-
-      return res.json({
-        partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
-        orderId: req.body.orderId,
-        resultCode: '0',
-        message: 'Success'
-      });
-    } catch (error) {
-      console.error('[MoMo IPN] Error creating order:', error);
-      return res.json({
-        partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
-        orderId: req.body.orderId,
-        resultCode: '99',
-        message: error.message || 'Error creating order'
-      });
     }
+
+    // Legacy: Nếu không có pendingOrder, trả về lỗi
+    console.error('[MoMo IPN] Pending order not found for orderId:', orderId);
+    return res.json({
+      partnerCode: process.env.MOMO_PARTNER_CODE || 'MOMO',
+      orderId: orderId,
+      resultCode: '99',
+      message: 'Pending order not found'
+    });
   }),
 
   /**
    * Xử lý return URL từ MoMo (sau khi user thanh toán xong)
    * GET /api/v1/payment/momo/return
-   * Theo code mẫu: parse userId từ orderInfo, tạo order từ cart
+   * Tạo order sau khi thanh toán thành công (nếu chưa tạo)
    */
   momoReturn: catchAsync(async (req, res) => {
-    const { resultCode, orderInfo } = req.query;
+    const { resultCode, orderId, orderInfo, transId } = req.query;
+
+    console.log('[MoMo Return] Received callback:', {
+      orderId,
+      resultCode,
+      orderInfo,
+      transId
+    });
 
     if (resultCode !== '0') {
       return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/failed?message=${encodeURIComponent('Thanh toán thất bại')}`);
     }
 
-    // Parse userId từ orderInfo theo code mẫu: "Thanh toan don hang {userId}"
-    const userId = orderInfo.split(' ')[4];
-    if (!userId) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/failed?message=${encodeURIComponent('Thông tin đơn hàng không hợp lệ')}`);
-    }
+    // Kiểm tra xem có phải temporary order (chưa tạo order) không
+    const pendingOrder = global.momoPendingOrders?.get(orderId);
+    
+    console.log('[MoMo Return] Pending order check:', {
+      orderId,
+      hasPendingOrder: !!pendingOrder,
+      pendingOrdersSize: global.momoPendingOrders?.size || 0,
+      pendingOrderKeys: global.momoPendingOrders ? Array.from(global.momoPendingOrders.keys()) : []
+    });
 
-    // Tìm cart của user
-    const findCartUser = await Cart.findOne({ user: userId });
-    if (!findCartUser) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/failed?message=${encodeURIComponent('Giỏ hàng không tồn tại')}`);
-    }
+    let finalOrderId = orderId;
 
-    try {
-      // Tạo order từ cart
-      const order = await orderService.createOrderFromCart(userId, {
-        paymentMethod: 'momo',
-        shippingMethod: 'standard'
-      });
+    if (pendingOrder) {
+      // Tạo order từ cartData sau khi thanh toán thành công
+      try {
+        const { userId, cartData } = pendingOrder;
+        console.log('[MoMo Return] Creating order from cartData after successful payment');
+        
+        const order = await orderService.createOrderFromCart(userId, {
+          shippingAddress: cartData.shippingAddress,
+          paymentMethod: cartData.paymentMethod || 'momo',
+          shippingMethod: cartData.shippingMethod || 'standard',
+          notes: cartData.notes || '',
+          isGift: cartData.isGift || false,
+          giftMessage: cartData.giftMessage || '',
+          selectedItemIds: cartData.selectedItemIds,
+          flashSaleReservationIds: cartData.flashSaleReservationIds
+        });
 
-      // Cập nhật order với payment info
-      order.paymentInfo.status = 'paid';
-      order.paymentInfo.transactionId = req.query.transId;
-      order.paymentInfo.paidAt = new Date();
-      if (order.status === 'pending') {
-        order.status = 'confirmed';
+        // Cập nhật order với payment info
+        order.paymentInfo.status = 'paid';
+        order.paymentInfo.transactionId = transId;
+        order.paymentInfo.paidAt = new Date();
+        order.status = 'confirmed'; // Luôn set confirmed khi thanh toán thành công
+        
+        // Mark paymentInfo và status là modified để đảm bảo save
+        order.markModified('paymentInfo');
+        order.markModified('status');
+        
+        await order.save();
+        
+        console.log('[MoMo Return] Order created and updated - paymentStatus:', order.paymentInfo.status, 'orderStatus:', order.status);
+
+        // Xóa pending order khỏi memory
+        global.momoPendingOrders.delete(orderId);
+        finalOrderId = order._id.toString();
+
+        console.log('[MoMo Return] Order created successfully:', order.orderNumber);
+        
+        // Redirect về success page với orderId
+        console.log('[MoMo Return] Redirecting to success page with orderId:', finalOrderId);
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success?orderId=${finalOrderId}`);
+      } catch (error) {
+        console.error('[MoMo Return] Error creating order from cartData:', error);
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/failed?message=${encodeURIComponent(error.message || 'Lỗi tạo đơn hàng')}`);
       }
-      await order.save();
-
-      // Xóa cart và tạo cart mới
-      await findCartUser.deleteOne();
-      await Cart.create({
-        user: userId,
-        items: []
-      });
-
-      // Giảm số lượng coupon nếu có
-      if (findCartUser.couponCode) {
-        // TODO: Implement coupon logic
+    } else {
+      // Nếu không có pendingOrder, có thể order đã được tạo từ IPN trước
+      // Tìm order bằng orderId (Momo orderId) hoặc tìm bằng transactionId
+      try {
+        console.log('[MoMo Return] Looking for existing order...');
+        // Không thể tìm order bằng Momo orderId vì nó không được lưu trong order
+        // Có thể tìm bằng transactionId nếu đã có
+        // Hoặc redirect về frontend để frontend tự tạo order từ localStorage
+        console.log('[MoMo Return] Cannot find order - pendingOrder is missing');
+        console.log('[MoMo Return] Redirecting to frontend to create order from localStorage');
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success?orderId=${orderId}&createOrder=true`);
+      } catch (error) {
+        console.error('[MoMo Return] Error:', error);
+        return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/failed?message=${encodeURIComponent(error.message || 'Lỗi xử lý thanh toán')}`);
       }
-
-      console.log('[MoMo Return] Order created successfully:', order.orderNumber);
-
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success/${order._id}`);
-    } catch (error) {
-      console.error('[MoMo Return] Error creating order:', error);
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/failed?message=${encodeURIComponent(error.message || 'Lỗi tạo đơn hàng')}`);
     }
   }),
 
@@ -788,6 +835,75 @@ export const paymentController = {
       });
     } catch (error) {
       console.error('[VNPay CreateOrder] Error creating order:', error);
+      throw new AppError(error.message || 'Không thể tạo order', 500);
+    }
+  }),
+
+  /**
+   * Tạo order sau khi thanh toán Momo thành công (fallback khi pendingOrder bị mất)
+   * POST /api/v1/payment/momo/create-order
+   * Frontend gửi cartData từ localStorage để tạo order
+   */
+  createOrderAfterMomoPayment: catchAsync(async (req, res) => {
+    const { orderId, cartData } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new AppError('Vui lòng đăng nhập', 401);
+    }
+
+    if (!orderId) {
+      throw new AppError('Vui lòng cung cấp orderId', 400);
+    }
+
+    if (!cartData) {
+      throw new AppError('Vui lòng cung cấp cartData', 400);
+    }
+
+    console.log('[MoMo CreateOrder] Creating order after payment:', {
+      orderId,
+      userId,
+      cartDataKeys: Object.keys(cartData)
+    });
+
+    try {
+      // Kiểm tra xem order đã tồn tại chưa (có thể đã được tạo từ IPN)
+      // Không thể tìm bằng Momo orderId vì nó không được lưu trong order
+      // Tạm thời tạo order mới
+
+      // Tạo order từ cartData
+      const order = await orderService.createOrderFromCart(userId, {
+        shippingAddress: cartData.shippingAddress,
+        paymentMethod: cartData.paymentMethod || 'momo',
+        shippingMethod: cartData.shippingMethod || 'standard',
+        notes: cartData.notes || '',
+        isGift: cartData.isGift || false,
+        giftMessage: cartData.giftMessage || '',
+        selectedItemIds: cartData.selectedItemIds,
+        flashSaleReservationIds: cartData.flashSaleReservationIds
+      });
+      
+      // Cập nhật order với payment info
+      order.paymentInfo.status = 'paid';
+      order.paymentInfo.method = cartData.paymentMethod || 'momo';
+      order.status = 'confirmed';
+      
+      order.markModified('paymentInfo');
+      order.markModified('status');
+      
+      await order.save();
+
+      console.log('[MoMo CreateOrder] Order created successfully:', order.orderNumber);
+
+      return res.json({
+        success: true,
+        data: {
+          order,
+          message: 'Order đã được tạo thành công'
+        }
+      });
+    } catch (error) {
+      console.error('[MoMo CreateOrder] Error creating order:', error);
       throw new AppError(error.message || 'Không thể tạo order', 500);
     }
   })

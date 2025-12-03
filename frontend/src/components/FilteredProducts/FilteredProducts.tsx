@@ -30,9 +30,13 @@ const FilteredProducts: React.FC<FilteredProductsProps> = ({
   onAddToCart,
   onAddToWishlist,
 }) => {
-  // Get filters from Redux or props
+  // Luôn dùng Redux filters (source of truth)
   const reduxFilters = useSelector((state: RootState) => state.filter.filters);
-  const filters = propsFilters || reduxFilters;
+  const filters = reduxFilters;
+  
+  console.log('🔴 FilteredProducts - Using Redux filters:', filters);
+  console.log('🔴 FilteredProducts - Redux filters:', reduxFilters);
+  console.log('🔴 FilteredProducts - Props filters (ignored):', propsFilters);
   
   const {
     products,

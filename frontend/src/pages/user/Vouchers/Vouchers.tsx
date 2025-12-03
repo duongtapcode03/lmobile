@@ -13,7 +13,6 @@ import {
   Space,
   Empty,
   Tabs,
-  message,
   Spin,
   Modal,
   Descriptions,
@@ -35,6 +34,7 @@ import './Vouchers.scss';
 const { TabPane } = Tabs;
 
 const Vouchers: React.FC = () => {
+  const toast = useToast();
   const [availableVouchers, setAvailableVouchers] = useState<Voucher[]>([]);
   const [savedVouchers, setSavedVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(false);
@@ -58,7 +58,7 @@ const Vouchers: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Failed to load vouchers:', error);
-      message.error('Không thể tải danh sách voucher');
+      toast.error('Không thể tải danh sách voucher');
     } finally {
       setLoading(false);
     }
@@ -67,20 +67,20 @@ const Vouchers: React.FC = () => {
   const handleSaveVoucher = async (voucherId: string) => {
     try {
       await voucherService.saveVoucher(voucherId);
-      message.success('Đã lưu voucher');
+      toast.success('Đã lưu voucher');
       loadVouchers();
     } catch (error: any) {
-      message.error(error.response?.data?.message || 'Không thể lưu voucher');
+      toast.error(error.response?.data?.message || 'Không thể lưu voucher');
     }
   };
 
   const handleRemoveSavedVoucher = async (voucherId: string) => {
     try {
       await voucherService.removeSavedVoucher(voucherId);
-      message.success('Đã bỏ lưu voucher');
+      toast.success('Đã bỏ lưu voucher');
       loadVouchers();
     } catch (error: any) {
-      message.error(error.response?.data?.message || 'Không thể bỏ lưu voucher');
+      toast.error(error.response?.data?.message || 'Không thể bỏ lưu voucher');
     }
   };
 

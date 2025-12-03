@@ -134,7 +134,7 @@ export interface PhoneListResponse {
 
 export interface PhoneFilter {
   category?: number | string; // Category ID (number or string for backward compatibility)
-  brand?: number[] | string[]; // Brand IDs (numbers or strings for backward compatibility)
+  brand?: number[] | string[] | string; // Brand IDs (numbers, strings, or comma-separated string)
   minPrice?: number;
   maxPrice?: number;
   storage?: string[];

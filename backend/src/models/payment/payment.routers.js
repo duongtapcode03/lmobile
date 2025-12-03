@@ -13,6 +13,7 @@ router.get('/vnpay/return', paymentController.vnpayReturn);
 // Protected routes (cần đăng nhập để tạo payment)
 router.use(protect);
 router.post('/momo/create', paymentController.createMomoPayment);
+router.post('/momo/create-order', paymentController.createOrderAfterMomoPayment);
 router.post('/vnpay/create', paymentController.createVNPayPayment);
 router.post('/vnpay/create-order', paymentController.createOrderAfterPayment);
 

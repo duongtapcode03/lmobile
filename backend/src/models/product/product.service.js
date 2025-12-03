@@ -502,8 +502,6 @@ export const productService = {
     // Tính toán phân trang
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Debug: Log filter để kiểm tra
-    console.log('🔍 getAllProducts - Final filter:', JSON.stringify(filter, null, 2));
 
     // Lấy sản phẩm với filter và sort
     const products = await Product.find(filter)
@@ -844,12 +842,6 @@ export const productService = {
       isActive: true // Chỉ lấy sản phẩm active
     };
     
-    // Debug: Log filter để kiểm tra
-    console.log('🔍 getProductsByCategory - categoryId:', categoryId);
-    console.log('🔍 getProductsByCategory - categoryNumId:', categoryNumId);
-    console.log('🔍 getProductsByCategory - query params:', JSON.stringify(query, null, 2));
-    console.log('🔍 getProductsByCategory - brand type:', typeof brand, 'value:', brand);
-    console.log('🔍 getProductsByCategory - brand isArray:', Array.isArray(brand));
 
     // Lọc theo thương hiệu
     // Frontend gửi brand dưới dạng comma-separated string: "8,9,10"
@@ -998,45 +990,15 @@ export const productService = {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Debug: Log final filter
-    console.log('🔍 getProductsByCategory - Final filter:', JSON.stringify(filter, null, 2));
-    console.log('🔍 getProductsByCategory - Sort:', sort);
-    console.log('🔍 getProductsByCategory - Skip:', skip, 'Limit:', parseInt(limit));
-
     try {
-      console.log('🔍 getProductsByCategory - Starting Product.find()...');
       const products = await Product.find(filter)
         .populate("brandRef", "name slug logoUrl")
         .populate("categoryRefs", "name slug")
         .sort(sort)
         .skip(skip)
         .limit(parseInt(limit));
-      
-      console.log('🔍 getProductsByCategory - Product.find() completed, products count:', products.length);
 
       const total = await Product.countDocuments(filter);
-      
-      // Debug: Log results
-      console.log(`📊 getProductsByCategory - Found ${products.length} products (total: ${total})`);
-      if (products.length > 0) {
-        console.log('📦 First product sample:', {
-          _id: products[0]._id,
-          name: products[0].name,
-          price: products[0].price,
-          categoryRefs: products[0].categoryRefs,
-          isActive: products[0].isActive
-        });
-      } else {
-        // Debug: Test query without price filter
-        const testFilter = { categoryRefs: categoryNumId };
-        const testCount = await Product.countDocuments(testFilter);
-        console.log(`⚠️ Test query without price filter: ${testCount} products found`);
-        
-        // Test với isActive
-        const testFilter2 = { categoryRefs: categoryNumId, isActive: true };
-        const testCount2 = await Product.countDocuments(testFilter2);
-        console.log(`⚠️ Test query with isActive=true: ${testCount2} products found`);
-      }
 
       return {
         products,

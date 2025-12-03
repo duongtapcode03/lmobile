@@ -4,5 +4,62 @@
   .page-header {
     margin-bottom: 24px;
   }
+
+  // Tối ưu table
+  .ant-table {
+    .ant-table-thead > tr > th {
+      padding: 12px 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .ant-table-tbody > tr > td {
+      padding: 12px 8px;
+      font-size: 13px;
+    }
+
+    // Cột thao tác
+    .ant-table-cell:last-child {
+      .ant-space {
+        flex-wrap: nowrap;
+        justify-content: center;
+      }
+
+      .ant-btn {
+        min-width: auto;
+        padding: 4px 8px;
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        
+        .anticon {
+          font-size: 14px;
+        }
+      }
+    }
+  }
+
+  // Responsive
+  @media (max-width: 1400px) {
+    .ant-table {
+      .ant-table-cell {
+        font-size: 12px;
+      }
+    }
+  }
+
+  @media (max-width: 1200px) {
+    padding: 16px;
+
+    .ant-table {
+      .ant-table-thead > tr > th,
+      .ant-table-tbody > tr > td {
+        padding: 8px 6px;
+        font-size: 12px;
+      }
+    }
+  }
 }
 

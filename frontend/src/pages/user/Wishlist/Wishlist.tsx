@@ -4,12 +4,12 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Row, Col, Button, Empty, Spin, message, Typography, Pagination } from 'antd';
+import { Row, Col, Button, Empty, Spin, Typography, Pagination } from 'antd';
 import { HeartOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { userService } from '../../../api/userService';
 import type { Wishlist } from '../../../types';
-import { PageWrapper } from '../../../components';
+import { PageWrapper, useToast } from '../../../components';
 import ProductCard from '../../../components/ProductCard';
 import './Wishlist.scss';
 
@@ -17,6 +17,7 @@ const { Title } = Typography;
 
 const WishlistPage: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [wishlist, setWishlist] = useState<Wishlist | null>(null);
@@ -52,7 +53,7 @@ const WishlistPage: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error loading wishlist:', error);
-      message.error('Không thể tải wishlist');
+      toast.error('Không thể tải wishlist');
     } finally {
       setLoading(false);
     }
@@ -72,10 +73,10 @@ const WishlistPage: React.FC = () => {
         detail: { productId }
       }));
       
-      message.success('Đã xóa sản phẩm khỏi wishlist');
+      toast.success('Đã xóa sản phẩm khỏi wishlist');
     } catch (error: any) {
       console.error('Error removing product:', error);
-      message.error('Không thể xóa sản phẩm');
+      toast.error('Không thể xóa sản phẩm');
       // Reload on error
       await loadWishlist();
     } finally {
@@ -96,10 +97,10 @@ const WishlistPage: React.FC = () => {
         detail: { productId: 'all' } // Special flag for clear all
       }));
       
-      message.success('Đã xóa toàn bộ wishlist');
+      toast.success('Đã xóa toàn bộ wishlist');
     } catch (error: any) {
       console.error('Error clearing wishlist:', error);
-      message.error('Không thể xóa wishlist');
+      toast.error('Không thể xóa wishlist');
     }
   }, [setSearchParams]);
 
@@ -123,7 +124,10 @@ const WishlistPage: React.FC = () => {
     return wishlist.items.map((item: any, index: number) => {
       const product = item.product?._id ? item.product : { _id: item.product };
       // Use SKU if available, otherwise fallback to _id
-      const productId = product.sku || product._id || item.product || `item-${index}`;
+      // Use _id for wishlist operations (backend will find product by _id)
+      const productId = product._id 
+        ? (typeof product._id === 'string' ? product._id : product._id.toString())
+        : (product.sku || item.product || `item-${index}`);
       
       // Ensure unique key - use index as fallback if productId is null/undefined
       const uniqueKey = productId || `wishlist-item-${index}`;

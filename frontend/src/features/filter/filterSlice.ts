@@ -5,10 +5,6 @@ export interface FilterState {
   category?: number | string; // Category ID (number or string for backward compatibility)
   brands: (number | string)[]; // Brand IDs (numbers or strings for backward compatibility)
   priceRange: [number, number];
-  inStock?: boolean;
-  storage?: string[];
-  nfc?: string[];
-  screenSize?: string[];
 }
 
 interface FilterSliceState {
@@ -21,10 +17,6 @@ const initialState: FilterSliceState = {
     category: undefined,
     brands: [],
     priceRange: [0, 50000000],
-    inStock: undefined,
-    storage: undefined,
-    nfc: undefined,
-    screenSize: undefined,
   },
   selectedCategoryId: null,
 };
@@ -57,18 +49,6 @@ const filterSlice = createSlice({
     setPriceRange: (state, action: PayloadAction<[number, number]>) => {
       state.filters.priceRange = action.payload;
     },
-    setInStock: (state, action: PayloadAction<boolean | undefined>) => {
-      state.filters.inStock = action.payload;
-    },
-    setStorage: (state, action: PayloadAction<string[] | undefined>) => {
-      state.filters.storage = action.payload;
-    },
-    setNfc: (state, action: PayloadAction<string[] | undefined>) => {
-      state.filters.nfc = action.payload;
-    },
-    setScreenSize: (state, action: PayloadAction<string[] | undefined>) => {
-      state.filters.screenSize = action.payload;
-    },
     resetFilters: (state) => {
       state.filters = initialState.filters;
       state.selectedCategoryId = null;
@@ -82,10 +62,6 @@ export const {
   updateFilter,
   setBrands,
   setPriceRange,
-  setInStock,
-  setStorage,
-  setNfc,
-  setScreenSize,
   resetFilters,
 } = filterSlice.actions;
 

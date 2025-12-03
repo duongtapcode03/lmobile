@@ -3,6 +3,7 @@ import { Order } from "./order.model.js";
 import { Product } from "../product/product.model.js";
 import { VoucherUsage } from "../voucher/voucherUsage.model.js";
 import { voucherIntegrationService } from "../voucher/voucherIntegration.service.js";
+import { sendReturnRequestStatusEmail } from "../../config/returnRequestEmail.js";
 
 export const returnRequestService = {
   /**
@@ -202,6 +203,29 @@ export const returnRequestService = {
 
     await returnRequest.save();
 
+    // Gửi email notification (async, không chặn response)
+    ReturnRequest.findById(returnRequest._id)
+      .populate("user", "name email")
+      .populate("order", "orderNumber _id")
+      .lean()
+      .then(populatedRequest => {
+        const user = populatedRequest.user;
+        if (user && user.email) {
+          sendReturnRequestStatusEmail(
+            user.email,
+            user.name || user.email,
+            populatedRequest,
+            "pending",
+            ""
+          ).catch(err => {
+            console.error("[ReturnRequest] Error sending email notification:", err);
+          });
+        }
+      })
+      .catch(err => {
+        console.error("[ReturnRequest] Error populating for email:", err);
+      });
+
     return returnRequest;
   },
 
@@ -287,6 +311,29 @@ export const returnRequestService = {
 
     await returnRequest.save();
 
+    // Gửi email notification (async, không chặn response)
+    ReturnRequest.findById(returnRequest._id)
+      .populate("user", "name email")
+      .populate("order", "orderNumber _id")
+      .lean()
+      .then(populatedRequest => {
+        const user = populatedRequest.user;
+        if (user && user.email) {
+          sendReturnRequestStatusEmail(
+            user.email,
+            user.name || user.email,
+            populatedRequest,
+            "approved",
+            adminNote
+          ).catch(err => {
+            console.error("[ReturnRequest] Error sending email notification:", err);
+          });
+        }
+      })
+      .catch(err => {
+        console.error("[ReturnRequest] Error populating for email:", err);
+      });
+
     return returnRequest;
   },
 
@@ -315,6 +362,29 @@ export const returnRequestService = {
     });
 
     await returnRequest.save();
+
+    // Gửi email notification (async, không chặn response)
+    ReturnRequest.findById(returnRequest._id)
+      .populate("user", "name email")
+      .populate("order", "orderNumber _id")
+      .lean()
+      .then(populatedRequest => {
+        const user = populatedRequest.user;
+        if (user && user.email) {
+          sendReturnRequestStatusEmail(
+            user.email,
+            user.name || user.email,
+            populatedRequest,
+            "rejected",
+            adminNote
+          ).catch(err => {
+            console.error("[ReturnRequest] Error sending email notification:", err);
+          });
+        }
+      })
+      .catch(err => {
+        console.error("[ReturnRequest] Error populating for email:", err);
+      });
 
     return returnRequest;
   },
@@ -365,6 +435,29 @@ export const returnRequestService = {
     });
 
     await returnRequest.save();
+
+    // Gửi email notification (async, không chặn response)
+    ReturnRequest.findById(returnRequest._id)
+      .populate("user", "name email")
+      .populate("order", "orderNumber _id")
+      .lean()
+      .then(populatedRequest => {
+        const user = populatedRequest.user;
+        if (user && user.email) {
+          sendReturnRequestStatusEmail(
+            user.email,
+            user.name || user.email,
+            populatedRequest,
+            "processing",
+            adminNote
+          ).catch(err => {
+            console.error("[ReturnRequest] Error sending email notification:", err);
+          });
+        }
+      })
+      .catch(err => {
+        console.error("[ReturnRequest] Error populating for email:", err);
+      });
 
     return returnRequest;
   },
@@ -424,6 +517,29 @@ export const returnRequestService = {
         // Không throw error, chỉ log
       }
     }
+
+    // Gửi email notification (async, không chặn response)
+    ReturnRequest.findById(returnRequest._id)
+      .populate("user", "name email")
+      .populate("order", "orderNumber _id")
+      .lean()
+      .then(populatedRequest => {
+        const user = populatedRequest.user;
+        if (user && user.email) {
+          sendReturnRequestStatusEmail(
+            user.email,
+            user.name || user.email,
+            populatedRequest,
+            "completed",
+            adminNote || "Hoàn tiền thành công"
+          ).catch(err => {
+            console.error("[ReturnRequest] Error sending email notification:", err);
+          });
+        }
+      })
+      .catch(err => {
+        console.error("[ReturnRequest] Error populating for email:", err);
+      });
 
     return returnRequest;
   },
@@ -491,6 +607,29 @@ export const returnRequestService = {
     });
 
     await returnRequest.save();
+
+    // Gửi email notification (async, không chặn response)
+    ReturnRequest.findById(returnRequest._id)
+      .populate("user", "name email")
+      .populate("order", "orderNumber _id")
+      .lean()
+      .then(populatedRequest => {
+        const user = populatedRequest.user;
+        if (user && user.email) {
+          sendReturnRequestStatusEmail(
+            user.email,
+            user.name || user.email,
+            populatedRequest,
+            "cancelled",
+            "Người dùng hủy yêu cầu"
+          ).catch(err => {
+            console.error("[ReturnRequest] Error sending email notification:", err);
+          });
+        }
+      })
+      .catch(err => {
+        console.error("[ReturnRequest] Error populating for email:", err);
+      });
 
     return returnRequest;
   }

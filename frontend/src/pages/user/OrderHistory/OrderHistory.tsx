@@ -4,12 +4,12 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Table, Tag, Button, Space, Typography, Empty, Spin, message, Card, Tabs } from 'antd';
+import { Table, Tag, Button, Space, Typography, Empty, Spin, Card, Tabs } from 'antd';
 import type { TabsProps } from 'antd';
 import { EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import orderService, { type Order } from '../../../api/orderService';
-import { PageWrapper } from '../../../components';
+import { PageWrapper, useToast } from '../../../components';
 import './OrderHistory.scss';
 
 const { Title, Text } = Typography;
@@ -18,6 +18,7 @@ type OrderStatus = 'all' | 'pending' | 'confirmed' | 'processing' | 'shipping' |
 
 const OrderHistoryPage: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [allOrders, setAllOrders] = useState<Order[]>([]); // Lưu tất cả đơn hàng
   const [activeTab, setActiveTab] = useState<OrderStatus>('all');
@@ -56,7 +57,7 @@ const OrderHistoryPage: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error loading orders:', error);
-      message.error('Không thể tải danh sách đơn hàng');
+      toast.error('Không thể tải danh sách đơn hàng');
     } finally {
       setLoading(false);
     }
@@ -191,11 +192,11 @@ const OrderHistoryPage: React.FC = () => {
   const handleCancelOrder = async (orderId: string) => {
     try {
       await orderService.cancelOrder(orderId);
-      message.success('Đã hủy đơn hàng');
+      toast.success('Đã hủy đơn hàng');
       loadAllOrders(); // Reload tất cả đơn hàng
     } catch (error: any) {
       console.error('Error cancelling order:', error);
-      message.error(error.response?.data?.message || 'Không thể hủy đơn hàng');
+      toast.error(error.response?.data?.message || 'Không thể hủy đơn hàng');
     }
   };
 

@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Result, Button, Spin, message } from 'antd';
+import { Result, Button, Spin } from 'antd';
 import { CheckCircleOutlined, HomeOutlined, ShoppingOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
@@ -12,12 +12,13 @@ import orderService from '../../../api/orderService';
 import paymentService from '../../../api/paymentService';
 import type { Order } from '../../../api/orderService';
 import { fetchCart } from '../../../features/cart/cartSlice';
-import { PageWrapper } from '../../../components';
+import { PageWrapper, useToast } from '../../../components';
 import './PaymentSuccess.scss';
 
 const PaymentSuccessPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<Order | null>(null);
@@ -38,7 +39,7 @@ const PaymentSuccessPage: React.FC = () => {
           
           if (!targetOrderNumber) {
             console.error('[PaymentSuccess] No orderNumber found in URL or cartData');
-            message.error('Không tìm thấy thông tin đơn hàng');
+            toast.error('Không tìm thấy thông tin đơn hàng');
             setLoading(false);
             return;
           }
@@ -65,7 +66,9 @@ const PaymentSuccessPage: React.FC = () => {
             // Order không tồn tại, tạo mới
             console.log('[PaymentSuccess] Order not found, creating from pendingOrderData');
             try {
-              const result = await paymentService.createOrderAfterPayment(targetOrderNumber, cartData);
+              // Xác định payment method từ cartData hoặc orderId
+              const paymentMethod = cartData.paymentMethod || (targetOrderNumber.startsWith('MOMO') ? 'momo' : 'vnpay');
+              const result = await paymentService.createOrderAfterPayment(targetOrderNumber, cartData, paymentMethod);
               
               if (result.success && result.data.order) {
                 console.log('[PaymentSuccess] Order created successfully:', result.data.order.orderNumber);
@@ -74,7 +77,7 @@ const PaymentSuccessPage: React.FC = () => {
                 localStorage.removeItem('selectedCartItems');
                 // Refresh cart để cập nhật số sản phẩm sau khi order được tạo
                 dispatch(fetchCart() as any);
-                message.success('Đơn hàng đã được tạo thành công');
+                toast.success('Đơn hàng đã được tạo thành công');
                 setLoading(false);
                 return;
               } else {
@@ -82,14 +85,14 @@ const PaymentSuccessPage: React.FC = () => {
               }
             } catch (createError: any) {
               console.error('[PaymentSuccess] Error creating order:', createError);
-              message.error(createError.message || 'Không thể tạo đơn hàng. Vui lòng liên hệ hỗ trợ.');
+              toast.error(createError.message || 'Không thể tạo đơn hàng. Vui lòng liên hệ hỗ trợ.');
               setLoading(false);
               return;
             }
           }
         } catch (error: any) {
           console.error('[PaymentSuccess] Error processing pendingOrderData:', error);
-          message.error('Lỗi xử lý thông tin đơn hàng. Vui lòng liên hệ hỗ trợ.');
+          toast.error('Lỗi xử lý thông tin đơn hàng. Vui lòng liên hệ hỗ trợ.');
           setLoading(false);
           return;
         }
@@ -97,7 +100,7 @@ const PaymentSuccessPage: React.FC = () => {
 
       // Bước 2: Nếu không có pendingOrderData, thử load order từ orderId
       if (!orderId) {
-        message.error('Không tìm thấy thông tin đơn hàng');
+        toast.error('Không tìm thấy thông tin đơn hàng');
         setLoading(false);
         return;
       }
@@ -126,14 +129,14 @@ const PaymentSuccessPage: React.FC = () => {
           // Nếu có flag createOrder hoặc orderId là TEMP-xxx, nhưng không có pendingOrderData
           // Thì không thể tạo order (thiếu cartData)
           if (createOrder || orderId.startsWith('TEMP-')) {
-            message.error('Không tìm thấy thông tin đơn hàng. Vui lòng liên hệ hỗ trợ.');
+            toast.error('Không tìm thấy thông tin đơn hàng. Vui lòng liên hệ hỗ trợ.');
           } else {
-            message.error('Không tìm thấy thông tin đơn hàng');
+            toast.error('Không tìm thấy thông tin đơn hàng');
           }
         }
       } catch (error: any) {
         console.error('[PaymentSuccess] Error loading order:', error);
-        message.error('Không thể tải thông tin đơn hàng');
+        toast.error('Không thể tải thông tin đơn hàng');
       } finally {
         setLoading(false);
       }
@@ -203,6 +206,8 @@ const formatPrice = (price: number): string => {
 };
 
 export default PaymentSuccessPage;
+
+
 
 
 

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Typography, Spin, Button, Avatar, message } from 'antd';
+import { Typography, Spin, Button, Avatar } from 'antd';
 import { ArrowLeftOutlined, UserOutlined } from '@ant-design/icons';
 import blogService from '../../../api/blogService';
 import type { Blog } from '../../../types';
-import { PageWrapper } from '../../../components';
+import { PageWrapper, useToast } from '../../../components';
 import './NewsDetail.scss';
 
 const { Title, Text, Paragraph } = Typography;
@@ -12,6 +12,7 @@ const { Title, Text, Paragraph } = Typography;
 const NewsDetailPage: React.FC = () => {
   const { slug, id } = useParams<{ slug?: string; id?: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blog, setBlog] = useState<Blog | null>(null);
@@ -44,7 +45,7 @@ const NewsDetailPage: React.FC = () => {
       } catch (err: any) {
         console.error('Error loading blog:', err);
         setError(err.message || 'Không thể tải thông tin tin tức');
-        message.error('Không thể tải thông tin tin tức');
+        toast.error('Không thể tải thông tin tin tức');
       } finally {
         setLoading(false);
       }

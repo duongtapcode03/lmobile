@@ -125,6 +125,21 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
       }
     }
 
+    // Validate thời gian 7 ngày trước khi submit
+    if (order.deliveredAt) {
+      const deliveredDate = new Date(order.deliveredAt);
+      const now = new Date();
+      const daysSinceDelivery = Math.floor((now.getTime() - deliveredDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysSinceDelivery > 7) {
+        message.error(`Đã quá thời hạn hoàn hàng. Đơn hàng đã được giao ${daysSinceDelivery} ngày trước (thời hạn: 7 ngày).`);
+        return;
+      }
+    } else {
+      message.error('Không thể xác định thời gian giao hàng. Vui lòng liên hệ hỗ trợ.');
+      return;
+    }
+
     try {
       setSubmitting(true);
       
@@ -165,6 +180,15 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
       style: 'currency',
       currency: 'VND'
     }).format(price);
+  };
+
+  // Check if order is eligible for return (within 7 days)
+  const isEligibleForReturn = () => {
+    if (!order.deliveredAt) return false;
+    const deliveredDate = new Date(order.deliveredAt);
+    const now = new Date();
+    const daysSinceDelivery = Math.floor((now.getTime() - deliveredDate.getTime()) / (1000 * 60 * 60 * 24));
+    return daysSinceDelivery <= 7;
   };
 
   const columns = [
@@ -303,19 +327,66 @@ const ReturnRequestModal: React.FC<ReturnRequestModalProps> = ({
           type="primary"
           loading={submitting}
           onClick={handleSubmit}
-          disabled={selectedItems.size === 0}
+          disabled={selectedItems.size === 0 || !isEligibleForReturn()}
         >
           Gửi yêu cầu
         </Button>
       ]}
     >
-      <Alert
-        message="Lưu ý"
-        description="Bạn chỉ có thể yêu cầu hoàn hàng trong vòng 7 ngày kể từ khi nhận hàng. Vui lòng chọn sản phẩm và điền lý do hoàn hàng."
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-      />
+      {(() => {
+        if (!order.deliveredAt) {
+          return (
+            <Alert
+              message="Lưu ý"
+              description="Không thể xác định thời gian giao hàng. Vui lòng liên hệ hỗ trợ nếu cần hoàn hàng."
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          );
+        }
+        
+        const deliveredDate = new Date(order.deliveredAt);
+        const now = new Date();
+        const daysSinceDelivery = Math.floor((now.getTime() - deliveredDate.getTime()) / (1000 * 60 * 60 * 24));
+        const daysRemaining = 7 - daysSinceDelivery;
+        
+        if (daysSinceDelivery > 7) {
+          return (
+            <Alert
+              message="Đã quá thời hạn"
+              description={`Đơn hàng đã được giao ${daysSinceDelivery} ngày trước. Thời hạn hoàn hàng là 7 ngày kể từ khi nhận hàng.`}
+              type="error"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          );
+        }
+        
+        if (daysRemaining <= 1) {
+          return (
+            <Alert
+              message="Lưu ý quan trọng"
+              description={daysRemaining === 0 
+                ? "Hôm nay là ngày cuối cùng để yêu cầu hoàn hàng. Vui lòng hoàn tất yêu cầu ngay."
+                : `Bạn còn ${daysRemaining} ngày để yêu cầu hoàn hàng. Vui lòng chọn sản phẩm và điền lý do hoàn hàng.`}
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          );
+        }
+        
+        return (
+          <Alert
+            message="Lưu ý"
+            description={`Bạn còn ${daysRemaining} ngày để yêu cầu hoàn hàng (7 ngày kể từ khi nhận hàng). Vui lòng chọn sản phẩm và điền lý do hoàn hàng.`}
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        );
+      })()}
 
       <Table
         columns={columns}

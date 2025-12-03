@@ -4,11 +4,11 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Row, Col, message, Select, Input, Space, Button, Breadcrumb } from 'antd';
+import { Row, Col, Select, Input, Space, Button, Breadcrumb } from 'antd';
 import { SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, HomeOutlined } from '@ant-design/icons';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { PageWrapper, CategorySidebar, FilteredProducts } from '../../../components';
+import { PageWrapper, CategorySidebar, FilteredProducts, useToast } from '../../../components';
 import categoryService from '../../../api/categoryService';
 import { userService } from '../../../api/userService';
 import type { Category } from '../../../api/categoryService';
@@ -37,6 +37,7 @@ const ProductsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const toast = useToast();
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,8 +50,6 @@ const ProductsPage: React.FC = () => {
     category: undefined,
     brands: [],
     priceRange: [0, 50000000],
-    storage: undefined,
-    screenSize: undefined,
   });
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -62,7 +61,7 @@ const ProductsPage: React.FC = () => {
         setCategories(response.data);
       } catch (error) {
         console.error('Failed to load categories:', error);
-        message.error('Không thể tải danh mục sản phẩm');
+        toast.error('Không thể tải danh mục sản phẩm');
       } finally {
         setLoading(false);
       }
@@ -74,7 +73,7 @@ const ProductsPage: React.FC = () => {
   // Get filters from Redux
   const reduxFilters = useSelector((state: RootState) => state.filter.filters);
   
-  // Load filters from URL params on mount and when URL changes
+  // Chỉ load filters từ URL params khi mount lần đầu (khi navigate từ bên ngoài)
   useEffect(() => {
     const categoryParam = searchParams.get('category');
     const brandParam = searchParams.get('brand');
@@ -82,147 +81,57 @@ const ProductsPage: React.FC = () => {
     const maxPriceParam = searchParams.get('maxPrice');
     const searchParam = searchParams.get('search');
     const sortParam = searchParams.get('sort');
-    const featuredParam = searchParams.get('featured');
-    const sortByParam = searchParams.get('sortBy');
-    const sortOrderParam = searchParams.get('sortOrder');
     const typeParam = searchParams.get('type') as 'featured' | 'new' | 'bestSeller' | null;
-
-    // Handle type param (API mới)
-    if (typeParam && ['featured', 'new', 'bestSeller'].includes(typeParam)) {
-      if (productType !== typeParam) {
-        console.log('🔍 Products.tsx - Setting productType from URL:', typeParam);
-        setProductType(typeParam);
-      }
-    } else if (typeParam === null && productType) {
-      console.log('🔍 Products.tsx - Clearing productType');
-      setProductType(undefined);
-    }
-
-    const storageParam = searchParams.get('storage');
-    const screenSizeParam = searchParams.get('screenSize');
-    
-    const newFilters: FilterState = {
-      category: categoryParam || undefined,
-      brands: brandParam ? brandParam.split(',') : [],
-      priceRange: [
-        minPriceParam ? parseInt(minPriceParam) : 0,
-        maxPriceParam ? parseInt(maxPriceParam) : 50000000,
-      ],
-      storage: storageParam ? storageParam.split(',') : undefined,
-      screenSize: screenSizeParam ? screenSizeParam.split(',') : undefined,
-    };
-
-    // Only update if different from current state
-    const filtersChanged = 
-      newFilters.category !== filters.category ||
-      JSON.stringify(newFilters.brands) !== JSON.stringify(filters.brands) ||
-      newFilters.priceRange[0] !== filters.priceRange[0] ||
-      newFilters.priceRange[1] !== filters.priceRange[1];
-    
-    if (filtersChanged || isInitialLoad) {
+    // Load filters từ URL chỉ khi mount (isInitialLoad = true)
+    if (isInitialLoad) {
+      const newFilters: FilterState = {
+        category: categoryParam || undefined,
+        brands: brandParam ? brandParam.split(',') : [],
+        priceRange: [
+          minPriceParam ? parseInt(minPriceParam) : 0,
+          maxPriceParam ? parseInt(maxPriceParam) : 50000000,
+        ],
+      };
+      
       setFilters(newFilters);
       dispatch(setReduxFilters(newFilters));
-    }
-    
-    if (searchParam !== searchQuery) {
-      const searchValue = searchParam || '';
-      setSearchQuery(searchValue);
-      setSearchInput(searchValue); // Sync input with URL param
-    }
-    
-    // Handle sort params: priority: sortBy/sortOrder > sort
-    if (sortByParam && sortOrderParam) {
-      // Map sortBy/sortOrder to sort format
-      let mappedSort = 'default';
-      if (sortByParam === 'createdAt' && sortOrderParam === 'desc') {
-        mappedSort = 'newest';
-      } else if (sortByParam === 'createdAt' && sortOrderParam === 'asc') {
-        mappedSort = 'oldest';
-      } else if (sortByParam === 'sold' && sortOrderParam === 'desc') {
-        mappedSort = 'sold';
-      } else if (sortByParam === 'price' && sortOrderParam === 'asc') {
-        mappedSort = 'price_asc';
-      } else if (sortByParam === 'price' && sortOrderParam === 'desc') {
-        mappedSort = 'price_desc';
+      
+      // Load search, sort, type từ URL
+      if (searchParam) {
+        setSearchQuery(searchParam);
+        setSearchInput(searchParam);
       }
-      if (mappedSort !== sortBy) {
-        setSortBy(mappedSort);
+      
+      if (sortParam) {
+        setSortBy(sortParam);
       }
-    } else if (sortParam !== sortBy) {
-      setSortBy(sortParam || 'default');
-    }
-    
-    // Handle featured param
-    if (featuredParam === 'true') {
-      if (featured !== 'true') {
-        setFeatured('true');
+      
+      if (typeParam && ['featured', 'new', 'bestSeller'].includes(typeParam)) {
+        setProductType(typeParam);
       }
-    } else if (featuredParam === null && featured) {
-      setFeatured(false);
-    }
-    
-    if (isInitialLoad) {
+      
       setIsInitialLoad(false);
     }
-  }, [searchParams]); // Run when URL params change
+  }, [isInitialLoad]); // Chỉ chạy khi isInitialLoad thay đổi (từ true -> false)
   
-  // Sync Redux filters to local state
-  useEffect(() => {
-    if (!isInitialLoad) {
-      setFilters(reduxFilters);
-    }
-  }, [reduxFilters, isInitialLoad]);
+  // Sync Redux filters to local state (chỉ khi không phải initial load)
+  // Note: Không nên sync từ Redux về local state vì có thể gây conflict với URL params
+  // URL params là source of truth, Redux chỉ để share state giữa components
+  // useEffect(() => {
+  //   if (!isInitialLoad) {
+  //     const reduxFiltersStr = JSON.stringify(reduxFilters);
+  //     const currentFiltersStr = JSON.stringify(filters);
+  //     
+  //     // Chỉ update nếu filters thực sự thay đổi
+  //     if (reduxFiltersStr !== currentFiltersStr) {
+  //       console.log('🔄 Syncing Redux filters to local state:', reduxFilters);
+  //       setFilters(reduxFilters);
+  //     }
+  //   }
+  // }, [reduxFilters, isInitialLoad, filters]);
   
-  // Sync state to URL params when filters/search/sort change (skip initial load)
-  useEffect(() => {
-    if (isInitialLoad) return;
-    
-    // Giữ lại type param nếu có (API mới) - lấy từ current URL
-    const existingType = searchParams.get('type');
-    
-    const params = new URLSearchParams();
-    
-    // Giữ lại type param nếu có (quan trọng: phải giữ lại để không mất khi sync)
-    if (existingType && ['featured', 'new', 'bestSeller'].includes(existingType)) {
-      params.set('type', existingType);
-    }
-
-    if (filters.category) {
-      params.set('category', String(filters.category));
-    }
-    if (filters.brands && filters.brands.length > 0) {
-      params.set('brand', filters.brands.join(','));
-    }
-
-    if (filters.priceRange) {
-      if (filters.priceRange[0] > 0) {
-        params.set('minPrice', filters.priceRange[0].toString());
-      }
-      if (filters.priceRange[1] < 50000000) {
-        params.set('maxPrice', filters.priceRange[1].toString());
-      }
-    }
-    if (filters.storage && filters.storage.length > 0) {
-      params.set('storage', filters.storage.join(','));
-    }
-    if (filters.screenSize && filters.screenSize.length > 0) {
-      params.set('screenSize', filters.screenSize.join(','));
-    }
-    if (searchQuery) {
-      params.set('search', searchQuery);
-    }
-    if (sortBy !== 'default') {
-      params.set('sort', sortBy);
-    }
-    
-    // Chỉ update nếu params thực sự thay đổi (tránh infinite loop)
-    const newParamsStr = params.toString();
-    const currentParamsStr = searchParams.toString();
-    
-    if (newParamsStr !== currentParamsStr) {
-      setSearchParams(params, { replace: true });
-    }
-  }, [filters, searchQuery, sortBy, setSearchParams, isInitialLoad, searchParams]);
+  // Không sync state lên URL nữa - chỉ dùng state để lưu filter
+  // URL chỉ dùng để load initial state khi mount hoặc khi navigate từ bên ngoài
 
   // Handle search input change (only update local state, no API call)
   const handleSearchInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -278,12 +187,12 @@ const ProductsPage: React.FC = () => {
         productId,
         quantity: 1
       });
-      message.success('Đã thêm vào giỏ hàng');
+      toast.success('Đã thêm vào giỏ hàng');
       // Tự động redirect đến trang giỏ hàng
       navigate('/user/cart');
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || 'Không thể thêm vào giỏ hàng';
-      message.error(errorMessage);
+      toast.error(errorMessage);
       
       // If 401, redirect to login
       if (error.response?.status === 401) {
@@ -304,14 +213,14 @@ const ProductsPage: React.FC = () => {
       category: undefined,
       brands: [],
       priceRange: [0, 50000000],
-      storage: undefined,
-      screenSize: undefined,
     };
     setFilters(defaultFilters);
     dispatch(setReduxFilters(defaultFilters));
     setSearchQuery('');
     setSearchInput('');
     setSortBy('default');
+    setProductType(undefined);
+    setFeatured(false);
     setSearchParams({}, { replace: true });
   };
 
@@ -398,7 +307,7 @@ const ProductsPage: React.FC = () => {
             {/* Products List */}
             <Col xs={24} md={17} lg={18} xl={18}>
               <FilteredProducts
-                filters={filters}
+                // Không truyền filters từ props nữa, để FilteredProducts tự lấy từ Redux
                 searchQuery={searchQuery}
                 sortBy={sortBy}
                 featured={featured}
@@ -406,15 +315,6 @@ const ProductsPage: React.FC = () => {
                 onAddToCart={handleAddToCart}
                 onAddToWishlist={handleAddToWishlist}
               />
-              {/* Debug: Log productType */}
-              {import.meta.env.DEV && productType && (
-                <div style={{ display: 'none' }}>
-                  {(() => {
-                    console.log('🔍 Products.tsx - Passing productType to FilteredProducts:', productType);
-                    return null;
-                  })()}
-                </div>
-              )}
             </Col>
           </Row>
         </div>

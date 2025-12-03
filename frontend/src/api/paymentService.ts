@@ -87,10 +87,13 @@ const paymentService = {
 
   /**
    * Tạo order sau khi thanh toán thành công (fallback khi pendingOrder bị mất)
+   * Dùng cho cả VNPay và Momo
    */
-  createOrderAfterPayment: async (orderNumber: string, cartData: any): Promise<any> => {
-    const response = await authApi.post('/payment/vnpay/create-order', {
-      orderNumber,
+  createOrderAfterPayment: async (orderNumber: string, cartData: any, paymentMethod: 'vnpay' | 'momo' = 'vnpay'): Promise<any> => {
+    const endpoint = paymentMethod === 'momo' ? '/payment/momo/create-order' : '/payment/vnpay/create-order';
+    const response = await authApi.post(endpoint, {
+      orderId: orderNumber, // Momo dùng orderId, VNPay dùng orderNumber
+      orderNumber: orderNumber,
       cartData
     });
     return response.data;

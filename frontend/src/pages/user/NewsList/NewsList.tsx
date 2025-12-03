@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Typography, Spin, Card, Avatar, message } from 'antd';
+import { Row, Col, Typography, Spin, Card, Avatar } from 'antd';
 import { Link } from 'react-router-dom';
 import { UserOutlined } from '@ant-design/icons';
 import blogService from '../../../api/blogService';
 import type { Blog } from '../../../types';
-import { PageWrapper } from '../../../components';
+import { PageWrapper, useToast } from '../../../components';
 import './NewsList.scss';
 
 const { Title, Text } = Typography;
 
 const NewsListPage: React.FC = () => {
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blogs, setBlogs] = useState<Blog[]>([]);
@@ -34,7 +35,7 @@ const NewsListPage: React.FC = () => {
       } catch (err: any) {
         console.error('Error loading blogs:', err);
         setError(err.message || 'Không thể tải danh sách tin tức');
-        message.error('Không thể tải danh sách tin tức');
+        toast.error('Không thể tải danh sách tin tức');
       } finally {
         setLoading(false);
       }

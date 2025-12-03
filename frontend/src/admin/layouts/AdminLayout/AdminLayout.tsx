@@ -17,7 +17,6 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  SettingOutlined,
   GiftOutlined,
   StarOutlined,
   ThunderboltOutlined,
@@ -45,7 +44,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const dispatch = useDispatch();
   
   const user = useSelector((state: RootState) => (state.auth as any).user);
-  const isAuthenticated = useSelector((state: RootState) => (state.auth as any).isAuthenticated);
 
   // Menu items
   const menuItems = [
@@ -113,11 +111,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       key: '/admin/support',
       icon: <CustomerServiceOutlined />,
       label: <Link to="/admin/support">Hỗ trợ</Link>,
-    },
-    {
-      key: '/admin/settings',
-      icon: <SettingOutlined />,
-      label: <Link to="/admin/settings">Cài đặt</Link>,
     },
   ];
 

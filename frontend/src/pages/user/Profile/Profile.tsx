@@ -15,7 +15,6 @@ import {
   Typography,
   Divider,
   Spin,
-  message,
   Avatar,
   Upload,
   Tabs,
@@ -45,7 +44,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../../../api/authService';
 import orderService from '../../../api/orderService';
 import addressService from '../../../api/addressService';
-import { PageWrapper } from '../../../components';
+import { PageWrapper, useToast } from '../../../components';
 import type { UploadFile } from 'antd/es/upload/interface';
 import type { Address } from '../../../types';
 import './Profile.scss';
@@ -67,6 +66,7 @@ interface UserProfile {
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
@@ -106,7 +106,7 @@ const ProfilePage: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error loading profile:', error);
-      message.error('Không thể tải thông tin cá nhân');
+      toast.error('Không thể tải thông tin cá nhân');
       if (error.response?.status === 401) {
         navigate('/login');
       }
@@ -122,7 +122,7 @@ const ProfilePage: React.FC = () => {
       setOrderStats(stats);
     } catch (error: any) {
       console.error('Error loading order stats:', error);
-      message.error('Không thể tải thống kê đơn hàng');
+      toast.error('Không thể tải thống kê đơn hàng');
     } finally {
       setOrderStatsLoading(false);
     }
@@ -135,7 +135,7 @@ const ProfilePage: React.FC = () => {
       setAddresses(data);
     } catch (error: any) {
       console.error('Error loading addresses:', error);
-      message.error('Không thể tải danh sách địa chỉ');
+      toast.error('Không thể tải danh sách địa chỉ');
     } finally {
       setLoadingAddresses(false);
     }
@@ -164,22 +164,22 @@ const ProfilePage: React.FC = () => {
   const handleDeleteAddress = async (id: string) => {
     try {
       await addressService.deleteAddress(id);
-      message.success('Đã xóa địa chỉ thành công');
+      toast.success('Đã xóa địa chỉ thành công');
       loadAddresses();
     } catch (error: any) {
       console.error('Error deleting address:', error);
-      message.error(error.response?.data?.message || 'Không thể xóa địa chỉ');
+      toast.error(error.response?.data?.message || 'Không thể xóa địa chỉ');
     }
   };
 
   const handleSetDefaultAddress = async (id: string) => {
     try {
       await addressService.setDefaultAddress(id);
-      message.success('Đã đặt địa chỉ làm mặc định');
+      toast.success('Đã đặt địa chỉ làm mặc định');
       loadAddresses();
     } catch (error: any) {
       console.error('Error setting default address:', error);
-      message.error(error.response?.data?.message || 'Không thể đặt địa chỉ mặc định');
+      toast.error(error.response?.data?.message || 'Không thể đặt địa chỉ mặc định');
     }
   };
 
@@ -187,16 +187,16 @@ const ProfilePage: React.FC = () => {
     try {
       if (editingAddress) {
         await addressService.updateAddress(editingAddress._id, values);
-        message.success('Đã cập nhật địa chỉ thành công');
+        toast.success('Đã cập nhật địa chỉ thành công');
       } else {
         await addressService.createAddress(values);
-        message.success('Đã thêm địa chỉ thành công');
+        toast.success('Đã thêm địa chỉ thành công');
       }
       setAddressModalVisible(false);
       loadAddresses();
     } catch (error: any) {
       console.error('Error saving address:', error);
-      message.error(error.response?.data?.message || 'Không thể lưu địa chỉ');
+      toast.error(error.response?.data?.message || 'Không thể lưu địa chỉ');
     }
   };
 
@@ -207,7 +207,7 @@ const ProfilePage: React.FC = () => {
       const updatedProfile = response.data;
       setProfile(updatedProfile);
       
-      message.success('Cập nhật thông tin thành công');
+      toast.success('Cập nhật thông tin thành công');
       
       // Redirect về trang chủ sau 1.5 giây để user thấy message
       setTimeout(() => {
@@ -224,7 +224,7 @@ const ProfilePage: React.FC = () => {
 
   const handleChangePassword = async (values: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
     if (values.newPassword !== values.confirmPassword) {
-      message.error('Mật khẩu mới không khớp');
+      toast.error('Mật khẩu mới không khớp');
       return;
     }
 
@@ -233,7 +233,7 @@ const ProfilePage: React.FC = () => {
       await authService.changePassword(values.currentPassword, values.newPassword);
       passwordForm.resetFields();
       
-      message.success('Đổi mật khẩu thành công');
+      toast.success('Đổi mật khẩu thành công');
       
       // Redirect về trang chủ sau 1.5 giây để user thấy message
       setTimeout(() => {
@@ -251,7 +251,7 @@ const ProfilePage: React.FC = () => {
   const handleAvatarChange = async (file: UploadFile) => {
     // TODO: Implement avatar upload
     // For now, just show a message
-    message.info('Tính năng upload avatar đang được phát triển');
+      toast.info('Tính năng upload avatar đang được phát triển');
     return false;
   };
 

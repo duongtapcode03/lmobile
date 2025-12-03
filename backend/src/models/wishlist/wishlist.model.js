@@ -60,26 +60,40 @@ wishlistSchema.virtual("isEmpty").get(function() {
 // Virtual để kiểm tra sản phẩm đã có trong wishlist chưa
 wishlistSchema.methods.hasProduct = function(productId) {
   // Normalize productId to Number for comparison (Product model sử dụng Number ID)
-  const normalizedProductId = productId ? (typeof productId === 'number' ? productId : parseInt(productId.toString(), 10)) : null;
+  const normalizedProductId = productId ? (typeof productId === 'number' ? productId : parseInt(String(productId), 10)) : null;
   if (!normalizedProductId || isNaN(normalizedProductId)) return false;
   
   return this.items.some(item => {
-    const itemProductId = item.product ? (typeof item.product === 'number' ? item.product : parseInt(item.product.toString(), 10)) : null;
+    // Normalize item.product to Number for comparison
+    const itemProductId = item.product ? (typeof item.product === 'number' ? item.product : parseInt(String(item.product), 10)) : null;
     return itemProductId === normalizedProductId;
   });
 };
 
 // Method để thêm sản phẩm vào wishlist
 wishlistSchema.methods.addProduct = function(productId, note) {
-  if (this.hasProduct(productId)) {
+  // Normalize productId to Number để đảm bảo nhất quán
+  const normalizedProductId = productId ? (typeof productId === 'number' ? productId : parseInt(String(productId), 10)) : null;
+  if (!normalizedProductId || isNaN(normalizedProductId)) {
+    throw new Error("ProductId không hợp lệ");
+  }
+  
+  if (this.hasProduct(normalizedProductId)) {
     throw new Error("Sản phẩm đã có trong wishlist");
   }
   
+  console.log('[addProduct Model] Adding productId:', normalizedProductId, 'Type:', typeof normalizedProductId);
+  
   this.items.push({
-    product: productId,
+    product: normalizedProductId, // Lưu dưới dạng Number
     addedAt: new Date(),
     note: note || ""
   });
+  
+  console.log('[addProduct Model] Items after add:', this.items.map(item => ({
+    product: item.product,
+    productType: typeof item.product
+  })));
   
   return this.save();
 };
@@ -87,20 +101,40 @@ wishlistSchema.methods.addProduct = function(productId, note) {
 // Method để xóa sản phẩm khỏi wishlist
 wishlistSchema.methods.removeProduct = function(productId) {
   // Normalize productId to Number for comparison (Product model sử dụng Number ID)
-  const normalizedProductId = productId ? (typeof productId === 'number' ? productId : parseInt(productId.toString(), 10)) : null;
+  const normalizedProductId = productId ? (typeof productId === 'number' ? productId : parseInt(String(productId), 10)) : null;
   if (!normalizedProductId || isNaN(normalizedProductId)) {
+    console.log('[removeProduct Model] Invalid productId:', productId, 'Type:', typeof productId);
     throw new Error("ProductId không hợp lệ");
   }
   
+  console.log('[removeProduct Model] Looking for productId:', normalizedProductId, 'Type:', typeof normalizedProductId);
+  console.log('[removeProduct Model] Current items:', this.items.map(item => ({
+    product: item.product,
+    productType: typeof item.product,
+    productString: String(item.product),
+    normalized: item.product ? (typeof item.product === 'number' ? item.product : parseInt(String(item.product), 10)) : null
+  })));
+  
   const index = this.items.findIndex(item => {
-    const itemProductId = item.product ? (typeof item.product === 'number' ? item.product : parseInt(item.product.toString(), 10)) : null;
-    return itemProductId === normalizedProductId;
+    // Normalize item.product to Number for comparison
+    const itemProductId = item.product ? (typeof item.product === 'number' ? item.product : parseInt(String(item.product), 10)) : null;
+    const match = itemProductId === normalizedProductId;
+    console.log('[removeProduct Model] Comparing:', {
+      itemProductId,
+      itemProductIdType: typeof itemProductId,
+      normalizedProductId,
+      normalizedProductIdType: typeof normalizedProductId,
+      match
+    });
+    return match;
   });
   
   if (index === -1) {
+    console.log('[removeProduct Model] Product not found in wishlist');
     throw new Error("Sản phẩm không có trong wishlist");
   }
   
+  console.log('[removeProduct Model] Found product at index:', index);
   this.items.splice(index, 1);
   return this.save();
 };

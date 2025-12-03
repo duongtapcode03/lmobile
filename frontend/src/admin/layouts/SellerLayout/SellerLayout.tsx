@@ -6,9 +6,7 @@
 import React, { useState } from 'react';
 import { Layout, Menu, Avatar, Dropdown, message } from 'antd';
 import {
-  DashboardOutlined,
   ShoppingOutlined,
-  FolderOutlined,
   ShoppingCartOutlined,
   FileTextOutlined,
   LogoutOutlined,
@@ -43,11 +41,6 @@ const SellerLayout: React.FC<SellerLayoutProps> = ({ children }) => {
   // Menu items for seller
   const menuItems = [
     {
-      key: '/seller/dashboard',
-      icon: <DashboardOutlined />,
-      label: <Link to="/seller/dashboard">Tổng quan</Link>,
-    },
-    {
       key: '/seller/products',
       icon: <ShoppingOutlined />,
       label: <Link to="/seller/products">Sản phẩm</Link>,
@@ -56,11 +49,6 @@ const SellerLayout: React.FC<SellerLayoutProps> = ({ children }) => {
       key: '/seller/orders',
       icon: <ShoppingCartOutlined />,
       label: <Link to="/seller/orders">Đơn hàng</Link>,
-    },
-    {
-      key: '/seller/categories',
-      icon: <FolderOutlined />,
-      label: <Link to="/seller/categories">Danh mục</Link>,
     },
     {
       key: '/seller/blogs',
@@ -130,7 +118,7 @@ const SellerLayout: React.FC<SellerLayoutProps> = ({ children }) => {
         width={250}
       >
         <div className="seller-logo">
-          <Link to="/seller/dashboard">
+          <Link to="/seller/products">
             {collapsed ? 'QL' : 'Trang quản lý'}
           </Link>
         </div>

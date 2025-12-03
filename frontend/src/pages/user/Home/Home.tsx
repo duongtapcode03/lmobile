@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { Row, Col, Typography, message } from 'antd';
-import { PageWrapper, CategorySidebar, QuickSaleSection, ScrollToTop, FilteredProducts, ProductSection } from '../../../components';
+import { Row, Col, Typography } from 'antd';
+import { PageWrapper, CategorySidebar, QuickSaleSection, ScrollToTop, FilteredProducts, ProductSection, useToast } from '../../../components';
 import FlashSaleSection from '../../../components/FlashSaleSection/FlashSaleSection';
 import VoucherSection from '../../../components/VoucherSection/VoucherSection';
 import BannerCarousel from '../../../components/BannerCarousel';
@@ -15,6 +15,7 @@ const { Title } = Typography;
 
 const HomePage: React.FC = () => {
   const dispatch = useDispatch();
+  const toast = useToast();
   
   // Load data using custom hook
   const {
@@ -40,12 +41,12 @@ const HomePage: React.FC = () => {
 
   const handleAddToCart = (_productId: string) => {
     // TODO: Implement add to cart
-    message.success('Đã thêm vào giỏ hàng');
+    toast.success('Đã thêm vào giỏ hàng');
   };
 
   const handleAddToWishlist = (_productId: string) => {
     // TODO: Implement add to wishlist
-    message.success('Đã thêm vào yêu thích');
+    toast.success('Đã thêm vào yêu thích');
   };
 
   return (

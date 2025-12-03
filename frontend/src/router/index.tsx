@@ -33,6 +33,7 @@ import ProfilePage from '../pages/user/Profile/Profile';
 import PaymentSuccessPage from '../pages/user/PaymentSuccess/PaymentSuccess';
 import PaymentFailedPage from '../pages/user/PaymentFailed/PaymentFailed';
 import VnpayReturnPage from '../pages/user/Payment/VnpayReturn';
+import MomoReturnPage from '../pages/user/Payment/MomoReturn';
 import FlashSalesPage from '../pages/user/FlashSales/FlashSales';
 import UserVouchersPage from '../pages/user/Vouchers/Vouchers';
 
@@ -52,10 +53,8 @@ import AdminFlashSales from '../pages/admin/FlashSales/FlashSales';
 import AdminSupport from '../pages/admin/Support/Support';
 
 // Seller Pages
-import SellerDashboard from '../pages/seller/Dashboard/Dashboard';
 import SellerProducts from '../pages/seller/Products/Products';
 import SellerOrders from '../pages/seller/Orders/Orders';
-import SellerCategories from '../pages/seller/Categories/Categories';
 import SellerBlogs from '../pages/seller/Blogs/Blogs';
 import SellerVouchers from '../pages/seller/Vouchers/Vouchers';
 import SellerReviews from '../pages/seller/Reviews/Reviews';
@@ -191,15 +190,13 @@ const AppRouter: React.FC = () => {
           <SellerLayout>
             <ProtectedRoute requiredRole="seller">
               <Routes>
-                <Route path="dashboard" element={<SellerDashboard />} />
                 <Route path="products" element={<SellerProducts />} />
                 <Route path="orders" element={<SellerOrders />} />
-                <Route path="categories" element={<SellerCategories />} />
                 <Route path="blogs" element={<SellerBlogs />} />
                 <Route path="vouchers" element={<SellerVouchers />} />
                 <Route path="reviews" element={<SellerReviews />} />
                 <Route path="support" element={<SellerSupport />} />
-                <Route path="*" element={<Navigate to="/seller/dashboard" replace />} />
+                <Route path="*" element={<Navigate to="/seller/products" replace />} />
               </Routes>
             </ProtectedRoute>
           </SellerLayout>
@@ -285,6 +282,16 @@ const AppRouter: React.FC = () => {
           <AdminRedirect>
             <UserLayout>
               <VnpayReturnPage />
+            </UserLayout>
+          </AdminRedirect>
+        }
+      />
+      <Route
+        path="/payment/momo/return"
+        element={
+          <AdminRedirect>
+            <UserLayout>
+              <MomoReturnPage />
             </UserLayout>
           </AdminRedirect>
         }
@@ -428,16 +435,6 @@ const AppRouter: React.FC = () => {
           <AdminLayout>
             <ProtectedRoute requiredRole="admin">
               <AdminSupport />
-            </ProtectedRoute>
-          </AdminLayout>
-        }
-      />
-      <Route
-        path="/admin/settings"
-        element={
-          <AdminLayout>
-            <ProtectedRoute requiredRole="admin">
-              <div>Settings - Coming soon</div>
             </ProtectedRoute>
           </AdminLayout>
         }

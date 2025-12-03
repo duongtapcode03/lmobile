@@ -29,11 +29,10 @@ const ProductCard: React.FC<ProductCardProps> = ({
   const isAuthenticated = useSelector((state: RootState) => (state.auth as any).isAuthenticated);
   const token = useSelector((state: RootState) => (state.auth as any).token);
   
-  // Use SKU instead of _id for wishlist operations
-  // Backend supports finding product by SKU
-  const productId = product.sku || (product._id 
+  // Use _id for wishlist operations (backend will find product by _id)
+  const productId = product._id 
     ? (typeof product._id === 'string' ? product._id : product._id.toString())
-    : '');
+    : (product.sku || '');
   
   // Debug: Log product info
   if (import.meta.env.DEV) {

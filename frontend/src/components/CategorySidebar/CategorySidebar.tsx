@@ -72,6 +72,7 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
     // Only dispatch if filters actually changed
     if (currentFiltersStr !== prevFiltersRef.current) {
       prevFiltersRef.current = currentFiltersStr;
+      console.log('🟢 CategorySidebar - useEffect filters changed, dispatching:', currentFilters);
       dispatch(setFilters(currentFilters));
     }
     // Use JSON.stringify for arrays to prevent infinite loops
@@ -89,6 +90,13 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
       setPriceRange(range);
       setPriceMin(range[0].toString());
       setPriceMax(range[1].toString());
+      
+      // Dispatch ngay lập tức khi price range thay đổi
+      dispatch(setFilters({
+        category: selectedCategoryId || undefined,
+        brands: selectedBrands,
+        priceRange: range,
+      }));
     }
   };
 
@@ -96,7 +104,15 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
   const handlePriceInputChange = () => {
     const min = parseInt(priceMin.replace(/\D/g, '')) || 0;
     const max = parseInt(priceMax.replace(/\D/g, '')) || 50000000;
-    setPriceRange([min, max]);
+    const range = [min, max] as [number, number];
+    setPriceRange(range);
+    
+    // Dispatch khi user nhập giá vào input
+    dispatch(setFilters({
+      category: selectedCategoryId || undefined,
+      brands: selectedBrands,
+      priceRange: range,
+    }));
   };
 
 
@@ -121,25 +137,21 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
       return;
     }
     
-    // 3 item đầu tiên: gọi API lấy products theo categoryId
+    // 3 item đầu tiên: chỉ update state, không navigate
     if (index < 3) {
-      try {
-        // Dispatch action để lưu categoryId vào Redux
-        dispatch(setFilters({
-          category: category._id,
-          brands: [],
-          priceRange: [0, 50000000]
-        }));
-        
-        // Navigate đến trang products với category filter
-        navigate(`/products?category=${category._id}`);
-      } catch (error) {
-        console.error('Error loading products by category:', error);
-      }
+      // Dispatch action để lưu categoryId vào Redux
+      dispatch(setFilters({
+        category: category._id,
+        brands: [],
+        priceRange: [0, 50000000]
+      }));
+      
+      // Navigate đến trang products (không có params, chỉ dùng state)
+      navigate('/products');
     } else {
       // Các item khác: navigate như bình thường
-    if (category.slug) {
-      navigate(`/category/${category.slug}`);
+      if (category.slug) {
+        navigate(`/category/${category.slug}`);
       }
     }
   };
@@ -234,18 +246,16 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
                           setSelectedBrands(newSelectedBrands);
                           
                           // Dispatch to Redux
-                          dispatch(setFilters({
+                          const newFilters = {
                             category: selectedCategoryId || undefined,
                             brands: newSelectedBrands,
                             priceRange: priceRange,
-                          }));
+                          };
+                          console.log('🔵 CategorySidebar - Toggle brand, dispatching filters:', newFilters);
+                          dispatch(setFilters(newFilters));
                           
-                          // Navigate to products page with brand filter
-                          // Format: brand=id1,id2 (Products page expects comma-separated values)
-                          const brandParam = newSelectedBrands.length > 0 ? `brand=${newSelectedBrands.join(',')}` : '';
-                          const categoryParam = selectedCategoryId ? `category=${selectedCategoryId}` : '';
-                          const params = [categoryParam, brandParam].filter(Boolean).join('&');
-                          navigate(`/products?${params}`);
+                          // Navigate to products page (không có params, chỉ dùng state)
+                          navigate('/products');
                         }
                       }}
                     >

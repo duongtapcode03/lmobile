@@ -132,18 +132,31 @@ export const wishlistService = {
       let product = null;
       let actualProductId = productId;
       
-      // Ưu tiên tìm bằng SKU trước
-      product = await Product.findOne({ sku: productId });
-      if (product) {
-        actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
-      } else {
-        // Thử tìm bằng _id Number
+      // Ưu tiên tìm bằng _id (MongoDB ObjectId hoặc Number)
+      // Thử tìm bằng MongoDB ObjectId trước
+      if (mongoose.Types.ObjectId.isValid(productId)) {
+        product = await Product.findById(productId);
+        if (product) {
+          actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
+        }
+      }
+      
+      // Nếu không tìm thấy, thử tìm bằng _id Number
+      if (!product) {
         const numericId = parseInt(productId, 10);
         if (!isNaN(numericId)) {
           product = await Product.findOne({ _id: numericId });
           if (product) {
             actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
           }
+        }
+      }
+      
+      // Nếu vẫn không tìm thấy, thử tìm bằng SKU (fallback)
+      if (!product) {
+        product = await Product.findOne({ sku: productId });
+        if (product) {
+          actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
         }
       }
       
@@ -158,6 +171,16 @@ export const wishlistService = {
         throw new AppError("Không thể xác định ID sản phẩm", 400);
       }
       
+      // Debug: Log trước khi thêm
+      console.log('[addProduct] Input productId:', productId);
+      console.log('[addProduct] Found product _id:', product._id, 'Type:', typeof product._id);
+      console.log('[addProduct] actualProductId to save:', actualProductId, 'Type:', typeof actualProductId);
+      console.log('[addProduct] Wishlist items before:', wishlist.items.map(item => ({
+        product: item.product,
+        productType: typeof item.product,
+        productString: String(item.product)
+      })));
+      
       // Kiểm tra đã có trong wishlist chưa (so sánh bằng Number)
       if (wishlist.hasProduct(actualProductId)) {
         throw new AppError("Sản phẩm đã có trong wishlist", 400);
@@ -165,6 +188,12 @@ export const wishlistService = {
       
       // Lưu vào wishlist với Number ID
       await wishlist.addProduct(actualProductId, note);
+      
+      console.log('[addProduct] Wishlist items after:', wishlist.items.map(item => ({
+        product: item.product,
+        productType: typeof item.product,
+        productString: String(item.product)
+      })));
       
       return await this.getWishlist(userId);
     } catch (error) {
@@ -189,22 +218,48 @@ export const wishlistService = {
       // Normalize productId
       productId = String(productId).trim();
       
+      // Debug: Log wishlist items trước khi xóa
+      console.log('[removeProduct] Input productId:', productId);
+      console.log('[removeProduct] Wishlist items:', wishlist.items.map(item => ({
+        product: item.product,
+        productType: typeof item.product,
+        productString: String(item.product)
+      })));
+      
       // Tìm product để lấy _id thực tế
       let actualProductId = productId;
+      let product = null;
       
-      // Ưu tiên tìm bằng SKU trước
-      const productBySku = await Product.findOne({ sku: productId });
-      if (productBySku) {
-        actualProductId = typeof productBySku._id === 'number' ? productBySku._id : parseInt(productBySku._id.toString(), 10);
-      } else {
-        // Thử tìm bằng _id Number
+      // Ưu tiên tìm bằng _id (MongoDB ObjectId hoặc Number)
+      // Thử tìm bằng MongoDB ObjectId trước
+      if (mongoose.Types.ObjectId.isValid(productId)) {
+        product = await Product.findById(productId);
+        if (product) {
+          actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
+        }
+      }
+      
+      // Nếu không tìm thấy, thử tìm bằng _id Number
+      if (!product) {
         const numericId = parseInt(productId, 10);
         if (!isNaN(numericId)) {
-          const product = await Product.findOne({ _id: numericId });
+          product = await Product.findOne({ _id: numericId });
           if (product) {
             actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
           }
         }
+      }
+      
+      // Nếu vẫn không tìm thấy, thử tìm bằng SKU (fallback)
+      if (!product) {
+        product = await Product.findOne({ sku: productId });
+        if (product) {
+          actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
+        }
+      }
+      
+      if (!product) {
+        throw new AppError("Sản phẩm không tồn tại", 404);
       }
       
       // Đảm bảo actualProductId là Number
@@ -212,6 +267,33 @@ export const wishlistService = {
       
       if (isNaN(numericProductId)) {
         throw new AppError("ProductId không hợp lệ", 400);
+      }
+      
+      console.log('[removeProduct] Found product _id:', product._id, 'Type:', typeof product._id);
+      console.log('[removeProduct] numericProductId:', numericProductId, 'Type:', typeof numericProductId);
+      console.log('[removeProduct] Checking if product exists in wishlist...');
+      
+      // Kiểm tra xem product có trong wishlist không trước khi xóa
+      const exists = wishlist.hasProduct(numericProductId);
+      console.log('[removeProduct] Product exists in wishlist:', exists);
+      
+      if (!exists) {
+        // Debug: Kiểm tra từng item
+        wishlist.items.forEach((item, index) => {
+          const itemProductId = item.product ? (typeof item.product === 'number' ? item.product : parseInt(item.product.toString(), 10)) : null;
+          console.log(`[removeProduct] Item ${index}:`, {
+            itemProductId,
+            itemProductIdType: typeof itemProductId,
+            numericProductId,
+            numericProductIdType: typeof numericProductId,
+            match: itemProductId === numericProductId
+          });
+        });
+        
+        // Nếu product không có trong wishlist, trả về wishlist hiện tại thay vì throw error
+        // (có thể đã bị xóa bởi toggle hoặc request khác - idempotent operation)
+        console.log('[removeProduct] Product not in wishlist, returning current wishlist (idempotent)');
+        return await this.getWishlist(userId);
       }
       
       await wishlist.removeProduct(numericProductId);
@@ -254,20 +336,38 @@ export const wishlistService = {
       
       // Tìm product để lấy _id thực tế (Number)
       let actualProductId = productId;
+      let product = null;
       
-      // Ưu tiên tìm bằng SKU trước
-      const productBySku = await Product.findOne({ sku: productId });
-      if (productBySku) {
-        actualProductId = typeof productBySku._id === 'number' ? productBySku._id : parseInt(productBySku._id.toString(), 10);
-      } else {
-        // Thử tìm bằng _id Number
+      // Ưu tiên tìm bằng _id (MongoDB ObjectId hoặc Number)
+      // Thử tìm bằng MongoDB ObjectId trước
+      if (mongoose.Types.ObjectId.isValid(productId)) {
+        product = await Product.findById(productId);
+        if (product) {
+          actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
+        }
+      }
+      
+      // Nếu không tìm thấy, thử tìm bằng _id Number
+      if (!product) {
         const numericId = parseInt(productId, 10);
         if (!isNaN(numericId)) {
-          const product = await Product.findOne({ _id: numericId });
+          product = await Product.findOne({ _id: numericId });
           if (product) {
             actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
           }
         }
+      }
+      
+      // Nếu vẫn không tìm thấy, thử tìm bằng SKU (fallback)
+      if (!product) {
+        product = await Product.findOne({ sku: productId });
+        if (product) {
+          actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
+        }
+      }
+      
+      if (!product) {
+        return false;
       }
       
       // Đảm bảo actualProductId là Number
@@ -346,33 +446,35 @@ export const wishlistService = {
       let product = null;
       let actualProductId = productId;
       
-      // Ưu tiên tìm bằng SKU trước
-      product = await Product.findOne({ sku: productId });
-      if (product) {
-        actualProductId = product._id ? product._id.toString() : productId;
-      } else {
-        // Thử tìm bằng _id (Number hoặc ObjectId)
-        if (mongoose.Types.ObjectId.isValid(productId)) {
-          try {
-            const objectId = new mongoose.Types.ObjectId(productId);
-            product = await Product.findById(objectId);
-            if (product) {
-              actualProductId = product._id ? product._id.toString() : productId;
-            }
-          } catch (err) {
-            // Continue
+      // Ưu tiên tìm bằng _id (MongoDB ObjectId hoặc Number)
+      // Thử tìm bằng MongoDB ObjectId trước
+      if (mongoose.Types.ObjectId.isValid(productId)) {
+        try {
+          product = await Product.findById(productId);
+          if (product) {
+            actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
+          }
+        } catch (err) {
+          // Continue
+        }
+      }
+      
+      // Nếu không tìm thấy, thử tìm bằng _id Number
+      if (!product) {
+        const numericId = parseInt(productId, 10);
+        if (!isNaN(numericId)) {
+          product = await Product.findOne({ _id: numericId });
+          if (product) {
+            actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
           }
         }
-        
-        // Nếu không tìm thấy, thử tìm bằng _id Number
-        if (!product) {
-          const numericId = parseInt(productId, 10);
-          if (!isNaN(numericId)) {
-            product = await Product.findOne({ _id: numericId });
-            if (product) {
-              actualProductId = product._id ? product._id.toString() : productId;
-            }
-          }
+      }
+      
+      // Nếu vẫn không tìm thấy, thử tìm bằng SKU (fallback)
+      if (!product) {
+        product = await Product.findOne({ sku: productId });
+        if (product) {
+          actualProductId = typeof product._id === 'number' ? product._id : parseInt(product._id.toString(), 10);
         }
       }
       
@@ -387,19 +489,39 @@ export const wishlistService = {
         throw new AppError("Không thể xác định ID sản phẩm", 400);
       }
       
+      // Debug: Log trước khi toggle
+      console.log('[toggleProduct] Input productId:', productId);
+      console.log('[toggleProduct] Found product _id:', product._id, 'Type:', typeof product._id);
+      console.log('[toggleProduct] actualProductId:', actualProductId, 'Type:', typeof actualProductId);
+      console.log('[toggleProduct] Wishlist items before:', wishlist.items.map(item => ({
+        product: item.product,
+        productType: typeof item.product,
+        productString: String(item.product)
+      })));
+      
       // Kiểm tra đã có trong wishlist chưa (so sánh bằng Number)
       const isInWishlist = wishlist.hasProduct(actualProductId);
+      console.log('[toggleProduct] isInWishlist:', isInWishlist);
       
       if (isInWishlist) {
         // Xóa khỏi wishlist
+        console.log('[toggleProduct] Removing product from wishlist...');
         await wishlist.removeProduct(actualProductId);
+        console.log('[toggleProduct] Product removed successfully');
         return {
           inWishlist: false,
           message: "Đã xóa sản phẩm khỏi wishlist"
         };
       } else {
         // Thêm vào wishlist
+        console.log('[toggleProduct] Adding product to wishlist...');
         await wishlist.addProduct(actualProductId);
+        console.log('[toggleProduct] Product added successfully');
+        console.log('[toggleProduct] Wishlist items after:', wishlist.items.map(item => ({
+          product: item.product,
+          productType: typeof item.product,
+          productString: String(item.product)
+        })));
         return {
           inWishlist: true,
           message: "Đã thêm sản phẩm vào wishlist"
