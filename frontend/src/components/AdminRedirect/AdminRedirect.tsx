@@ -1,9 +1,9 @@
 /**
  * AdminRedirect Component
- * Tự động redirect admin về /admin nếu họ truy cập trang customer
+ * Tự động redirect admin về /admin và seller về /seller nếu họ truy cập trang customer
  */
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { Spin } from 'antd';
@@ -49,6 +49,20 @@ const AdminRedirect: React.FC<AdminRedirectProps> = ({ children }) => {
         console.log('[AdminRedirect] Redirecting admin from', location.pathname, 'to /admin');
       }
       return <Navigate to="/admin" replace />;
+    }
+  }
+
+  // If user is seller and trying to access customer pages, redirect to seller dashboard
+  if (isAuthenticated && user?.role === 'seller') {
+    const isSellerRoute = location.pathname.startsWith('/seller');
+    const isAuthRoute = ['/login', '/register', '/forgot-password', '/reset-password'].includes(location.pathname);
+    
+    // If seller is on customer pages (not seller routes and not auth routes), redirect to seller
+    if (!isSellerRoute && !isAuthRoute) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[AdminRedirect] Redirecting seller from', location.pathname, 'to /seller');
+      }
+      return <Navigate to="/seller" replace />;
     }
   }
 
